@@ -35,6 +35,8 @@ def parse_arguments():
                         help="path to val set (must contain database and queries)")
     parser.add_argument("--test_path", type=str, default="data/sf_xs/test",
                         help="path to test set (must contain database and queries)")
+    parser.add_argument("--log_path", type=str, default="./LOGS",
+                        help="path to store log files of pytorch lightning library and checkpoints")
     
     args = parser.parse_args()
     return args
