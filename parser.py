@@ -15,6 +15,8 @@ def parse_arguments():
                         help="stop when training reaches max_epochs")
     parser.add_argument("--num_workers", type=int, default=8,
                         help="number of processes to use for data loading / preprocessing")
+    parser.add_argument("--load_checkpoint", type=bool, default=False,
+                        help="whether to load pytorch lightning checkpoints")
 
     # Architecture parameters
     parser.add_argument("--descriptors_dim", type=int, default=512,
@@ -37,6 +39,8 @@ def parse_arguments():
                         help="path to test set (must contain database and queries)")
     parser.add_argument("--log_path", type=str, default="./LOGS",
                         help="path to store log files of pytorch lightning library and checkpoints")
+    parser.add_argument("--checkpoint_path", type=str, default="./LOGS/lightning_logs/version_0/checkpoints/*.ckpt",
+                        help="path for loading pytorch lightning checkpoints")
     
     args = parser.parse_args()
     return args
