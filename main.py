@@ -1,8 +1,9 @@
-
 import torch
 import numpy as np
 import torchvision.models
 import pytorch_lightning as pl
+from torch import nn
+import torch.nn.functional as F
 from torchvision import transforms as tfm
 from pytorch_metric_learning import losses
 from torch.utils.data.dataloader import DataLoader
@@ -12,10 +13,28 @@ import utils
 import parser
 from datasets.test_dataset import TestDataset
 from datasets.train_dataset import TrainDataset
-import glob
+
+torch.set_float32_matmul_precision("highest")
 
 
-class LightningModel(pl.LightningModule):
+class GeM(nn.Module):
+    def __init__(self, p=3, eps=1e-6):
+        super(GeM, self).__init__()
+        self.p = nn.Parameter(torch.ones(1) * p)
+        self.eps = eps
+
+    def forward(self, x):
+        return self.gem(x, p=self.p, eps=self.eps)
+
+    def gem(self, x, p=3, eps=1e-6):
+        return F.avg_pool2d(x.clamp(min=eps).pow(p), (x.size(-2), x.size(-1))).pow(1. / p)
+
+    def __repr__(self):
+        return self.__class__.__name__ + '(' + 'p=' + '{:.4f}'.format(self.p.data.tolist()[0]) + ', ' + 'eps=' + str(
+            self.eps) + ')'
+
+
+class GeoModel(pl.LightningModule):
     def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True):
         super().__init__()
         self.val_dataset = val_dataset
@@ -26,6 +45,7 @@ class LightningModel(pl.LightningModule):
         self.model = torchvision.models.resnet18(weights=torchvision.models.ResNet18_Weights.DEFAULT)
         # Change the output of the FC layer to the desired descriptors dimension
         self.model.fc = torch.nn.Linear(self.model.fc.in_features, descriptors_dim)
+        self.model.avgpool = GeM()
         # Set the loss function
         self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
 
@@ -52,7 +72,7 @@ class LightningModel(pl.LightningModule):
         # Feed forward the batch to the model
         descriptors = self(images)  # Here we are calling the method forward that we defined above
         loss = self.loss_function(descriptors, labels)  # Call the loss_function we defined above
-        
+
         self.log('loss', loss.item(), logger=True)
         return {'loss': loss}
 
@@ -77,8 +97,8 @@ class LightningModel(pl.LightningModule):
     def inference_epoch_end(self, all_descriptors, inference_dataset, num_preds_to_save=0):
         """all_descriptors contains database then queries descriptors"""
         all_descriptors = np.concatenate(all_descriptors)
-        queries_descriptors = all_descriptors[inference_dataset.database_num : ]
-        database_descriptors = all_descriptors[ : inference_dataset.database_num]
+        queries_descriptors = all_descriptors[inference_dataset.database_num:]
+        database_descriptors = all_descriptors[: inference_dataset.database_num]
 
         recalls, recalls_str = utils.compute_recalls(
             inference_dataset, queries_descriptors, database_descriptors,
@@ -87,6 +107,7 @@ class LightningModel(pl.LightningModule):
         print(recalls_str)
         self.log('R@1', recalls[0], prog_bar=False, logger=True)
         self.log('R@5', recalls[1], prog_bar=False, logger=True)
+
 
 def get_datasets_and_dataloaders(args):
     train_transform = tfm.Compose([
@@ -102,7 +123,8 @@ def get_datasets_and_dataloaders(args):
     )
     val_dataset = TestDataset(dataset_folder=args.val_path)
     test_dataset = TestDataset(dataset_folder=args.test_path)
-    train_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, num_workers=args.num_workers, shuffle=True)
+    train_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, num_workers=args.num_workers,
+                              shuffle=True)
     val_loader = DataLoader(dataset=val_dataset, batch_size=args.batch_size, num_workers=4, shuffle=False)
     test_loader = DataLoader(dataset=test_dataset, batch_size=args.batch_size, num_workers=4, shuffle=False)
     return train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader
@@ -112,7 +134,9 @@ if __name__ == '__main__':
     args = parser.parse_arguments()
 
     train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args)
-    
+    model = GeoModel(val_dataset, test_dataset, args.descriptors_dim, args.num_preds_to_save,
+                     args.save_only_wrong_preds)
+
     # Model params saving using Pytorch Lightning. Save the best 3 models according to Recall@1
     checkpoint_cb = ModelCheckpoint(
         monitor='R@1',
@@ -136,15 +160,6 @@ if __name__ == '__main__':
         reload_dataloaders_every_n_epochs=1,  # we reload the dataset to shuffle the order
         log_every_n_steps=20,
     )
-    
-    # Load the model from checkpoint or create it from scratch
-    if args.load_checkpoint:
-        ckpt = glob.glob(f'{args.checkpoint_path}/*.ckpt', recursive=True)[-1]
-        model = LightningModel.load_from_checkpoint(ckpt)
-    else:
-        model = LightningModel(val_dataset, test_dataset, args.descriptors_dim, args.num_preds_to_save, args.save_only_wrong_preds)
-    
     trainer.validate(model=model, dataloaders=val_loader)
     trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
     trainer.test(model=model, dataloaders=test_loader)
-
