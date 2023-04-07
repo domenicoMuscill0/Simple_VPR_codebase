@@ -127,7 +127,7 @@ if __name__ == '__main__':
     trainer = pl.Trainer(
         accelerator='gpu',
         devices=[0],
-        default_root_dir='./LOGS',  # Tensorflow can be used to viz
+        default_root_dir=args.log_path,  # Tensorflow can be used to viz
         num_sanity_val_steps=0,  # runs a validation step before stating training
         precision=16,  # we use half precision to reduce  memory usage
         max_epochs=args.max_epochs,
