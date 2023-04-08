@@ -138,7 +138,7 @@ if __name__ == '__main__':
     model = GeoModel(val_dataset, test_dataset, args.descriptors_dim, args.num_preds_to_save,
                      args.save_only_wrong_preds)
     if args.load_checkpoint:
-        model.load_from_checkpoint(args.checkpoint_path + os.listdir(args.checkpoint_path)[-1])
+        model.load_from_checkpoint(args.checkpoint_path + "/" + os.listdir(args.checkpoint_path)[-1])
 
     # Model params saving using Pytorch Lightning. Save the best 3 models according to Recall@1
     checkpoint_cb = ModelCheckpoint(
