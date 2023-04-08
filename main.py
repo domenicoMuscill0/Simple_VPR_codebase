@@ -135,10 +135,12 @@ if __name__ == '__main__':
     args = parser.parse_arguments()
 
     train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args)
-    model = GeoModel(val_dataset, test_dataset, args.descriptors_dim, args.num_preds_to_save,
-                     args.save_only_wrong_preds)
+    kwargs = {val_dataset=val_dataset, test_dataset=test_dataset, descriptors_dim=args.descriptors_dim, num_preds_to_save=args.num_preds_to_save,
+                     save_only_wrong_preds=args.save_only_wrong_preds}
     if args.load_checkpoint:
-        model.load_from_checkpoint(args.checkpoint_path + "/" + os.listdir(args.checkpoint_path)[-1])
+        GeoModel.load_from_checkpoint(args.checkpoint_path + "/" + os.listdir(args.checkpoint_path)[-1], **kwargs)
+    else:
+        model = GeoModel(**kwargs)
 
     # Model params saving using Pytorch Lightning. Save the best 3 models according to Recall@1
     checkpoint_cb = ModelCheckpoint(
