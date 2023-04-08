@@ -135,8 +135,8 @@ if __name__ == '__main__':
     args = parser.parse_arguments()
 
     train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args)
-    kwargs = {val_dataset=val_dataset, test_dataset=test_dataset, descriptors_dim=args.descriptors_dim, num_preds_to_save=args.num_preds_to_save,
-                     save_only_wrong_preds=args.save_only_wrong_preds}
+    kwargs = {"val_dataset"=val_dataset, "test_dataset"=test_dataset, "descriptors_dim"=args.descriptors_dim, "num_preds_to_save"=args.num_preds_to_save,
+                     "save_only_wrong_preds"=args.save_only_wrong_preds}
     if args.load_checkpoint:
         GeoModel.load_from_checkpoint(args.checkpoint_path + "/" + os.listdir(args.checkpoint_path)[-1], **kwargs)
     else:
