@@ -49,6 +49,7 @@ class GeoModel(pl.LightningModule):
         self.model.avgpool = GeM()
         # Set the loss function
         self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
+        self.save_hyperparameters()
 
     def forward(self, images):
         descriptors = self.model(images)
@@ -103,7 +104,8 @@ class GeoModel(pl.LightningModule):
 
         recalls, recalls_str = utils.compute_recalls(
             inference_dataset, queries_descriptors, database_descriptors,
-            trainer.logger.log_dir, num_preds_to_save, self.save_only_wrong_preds
+            output_folder=trainer.logger.log_dir, num_preds_to_save=num_preds_to_save,
+            save_only_wrong_preds=self.save_only_wrong_preds
         )
         print(recalls_str)
         self.log('R@1', recalls[0], prog_bar=False, logger=True)
@@ -138,7 +140,7 @@ if __name__ == '__main__':
     kwargs = {"val_dataset": val_dataset, "test_dataset": test_dataset, "descriptors_dim": args.descriptors_dim,
               "num_preds_to_save": args.num_preds_to_save, "save_only_wrong_preds": args.save_only_wrong_preds}
     if args.load_checkpoint:
-        GeoModel.load_from_checkpoint(args.checkpoint_path + "/" + os.listdir(args.checkpoint_path)[-1], **kwargs)
+        model = GeoModel.load_from_checkpoint(args.checkpoint_path + "/" + os.listdir(args.checkpoint_path)[-1])
     else:
         model = GeoModel(**kwargs)
 
@@ -163,7 +165,7 @@ if __name__ == '__main__':
         check_val_every_n_epoch=1,  # run validation every epoch
         callbacks=[checkpoint_cb],  # we only run the checkpointing callback (you can add more)
         reload_dataloaders_every_n_epochs=1,  # we reload the dataset to shuffle the order
-        log_every_n_steps=20,
+        log_every_n_steps=20
     )
     trainer.validate(model=model, dataloaders=val_loader)
     trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
