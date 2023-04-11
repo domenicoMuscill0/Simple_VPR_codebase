@@ -8,7 +8,7 @@ from torchvision import transforms as tfm
 from pytorch_metric_learning import losses
 from torch.utils.data.dataloader import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
-from pytorch_lightning.pytorch.loggers import NeptuneLogger
+from pytorch_lightning.loggers import NeptuneLogger
 import neptune
 
 import utils
