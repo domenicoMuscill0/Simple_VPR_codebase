@@ -41,6 +41,8 @@ def parse_arguments():
                         help="path to store log files of pytorch lightning library and checkpoints")
     parser.add_argument("--checkpoint_path", type=str, default="./LOGS/lightning_logs/version_0/checkpoints/*.ckpt",
                         help="path for loading pytorch lightning checkpoints")
+
+    parser.add_argument("--neptune_api_key", type=str, default="", help="api key for neptune")
     
     args = parser.parse_args()
     return args
