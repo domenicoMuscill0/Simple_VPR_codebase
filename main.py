@@ -8,7 +8,7 @@ from torchvision import transforms as tfm
 from pytorch_metric_learning import losses
 from torch.utils.data.dataloader import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
-from lightning.pytorch.loggers import NeptuneLogger
+from pytorch_lightning.pytorch.loggers import NeptuneLogger
 import neptune
 
 import utils
@@ -152,7 +152,7 @@ if __name__ == '__main__':
             project="silviapiatino/geolocalization",  # format "workspace-name/project-name"
             tags=["training", "resnet", "prove_iniziali", "gem"],  # optional
         )
-    
+
 
     # Model params saving using Pytorch Lightning. Save the best 3 models according to Recall@1
     checkpoint_cb = ModelCheckpoint(
