@@ -8,7 +8,7 @@ from torchvision import transforms as tfm
 from pytorch_metric_learning import losses
 from torch.utils.data.dataloader import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
-
+import matplotlib.pyplot as plt
 import utils
 import parser
 from datasets.test_dataset import TestDataset
@@ -33,6 +33,27 @@ class GeM(nn.Module):
     def __repr__(self):
         return self.__class__.__name__ + '(' + 'p=' + '{:.4f}'.format(self.p.data.tolist()[0]) + ', ' + 'eps=' + str(
             self.eps) + ')'
+
+
+class PrintDescriptor(pl.Callback):
+    def __init__(self, n_images: int = 2):
+        self.n_images = n_images
+
+    def on_test_batch_end(
+            self,
+            trainer: "pl.Trainer",
+            pl_module: "pl.LightningModule",
+            outputs,  # Training step output
+            batch,
+            batch_idx: int,
+            dataloader_idx: int = 0):
+        images, labels = batch
+        for i in range(self.n_images):
+            descriptor = pl_module(images[i])
+            descriptor = descriptor.reshape(descriptor.size(-2), descriptor.size(-1), 3)
+            plt.imsave(args.log_path + f"/descriptors/P:{labels[i]}_B:{batch_idx}", descriptor)
+            # Add an epoch variable to see how descriptors change?
+            plt.imshow(descriptor)
 
 
 class GeoModel(pl.LightningModule):
@@ -144,15 +165,17 @@ if __name__ == '__main__':
     else:
         model = GeoModel(**kwargs)
 
-    # Model params saving using Pytorch Lightning. Save the best 3 models according to Recall@1
+    # Model params saving using Pytorch Lightning. Save the best model according to Recall@1
     checkpoint_cb = ModelCheckpoint(
         monitor='R@1',
         filename='_epoch({epoch:02d})_step({step:04d})_R@1[{val/R@1:.4f}]_R@5[{val/R@5:.4f}]',
         auto_insert_metric_name=False,
         save_weights_only=True,
-        save_top_k=3,
+        save_top_k=1,
         mode='max'
     )
+
+    descriptor_printer_cb = PrintDescriptor()
 
     # Instantiate a trainer
     trainer = pl.Trainer(
@@ -163,7 +186,7 @@ if __name__ == '__main__':
         precision=16,  # we use half precision to reduce  memory usage
         max_epochs=args.max_epochs,
         check_val_every_n_epoch=1,  # run validation every epoch
-        callbacks=[checkpoint_cb],  # we only run the checkpointing callback (you can add more)
+        callbacks=[checkpoint_cb, descriptor_printer_cb],  # we only run the checkpointing callback (you can add more)
         reload_dataloaders_every_n_epochs=1,  # we reload the dataset to shuffle the order
         log_every_n_steps=20
     )
