@@ -148,7 +148,7 @@ if __name__ == '__main__':
     if args.neptune_api_key:
         neptune_logger = NeptuneLogger(
             api_key=args.neptune_api_key,  # replace with your own
-            project="silviapiatino/geolocalization",  # format "workspace-name/project-name"
+            project="MLDL/geolocalization",  # format "workspace-name/project-name"
             tags=["training", "resnet", "prove_iniziali", "gem"],  # optional
         )
 
