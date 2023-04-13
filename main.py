@@ -13,7 +13,7 @@ from pytorch_lightning.loggers import NeptuneLogger
 
 
 import matplotlib.pyplot as plt
-n
+
 import utils
 import parser
 from datasets.test_dataset import TestDataset
