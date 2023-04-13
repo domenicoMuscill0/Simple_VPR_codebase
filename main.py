@@ -150,8 +150,15 @@ if __name__ == '__main__':
             api_key=args.neptune_api_key,  # replace with your own
             project="MLDL/geolocalization",  # format "workspace-name/project-name"
             tags=["training", "resnet", "prove_iniziali", "gem"],  # optional
+            log_model_checkpoints=False,
         )
+        PARAMS = {
+            "batch_size": args.batch_size,
+            "lr": 0.001,
+            "max_epochs": args.max_epochs,
+        }
 
+        neptune_logger.log_hyperparams(params=PARAMS)
 
     # Model params saving using Pytorch Lightning. Save the best 3 models according to Recall@1
     checkpoint_cb = ModelCheckpoint(
