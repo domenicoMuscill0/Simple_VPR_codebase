@@ -6,7 +6,7 @@ from typing import Tuple
 from torch.utils.data import Dataset
 
 import visualizations
-from Simple_VPR_codebase import parser
+#from Simple_VPR_codebase import parser
 
 # Compute R@1, R@5, R@10, R@20
 RECALL_VALUES = [1, 5, 10, 20]
