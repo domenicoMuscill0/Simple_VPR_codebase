@@ -76,7 +76,7 @@ class GeoModel(pl.LightningModule):
         descriptors = self(images)  # Here we are calling the method forward that we defined above
         loss = self.loss_function(descriptors, labels)  # Call the loss_function we defined above
 
-        self.log('loss', str(loss.item()), logger=True)
+        self.log('loss', loss.item(), logger=True)
         return {'loss': loss}
 
     # For validation and test, we iterate step by step over the validation set
@@ -109,8 +109,8 @@ class GeoModel(pl.LightningModule):
             save_only_wrong_preds=self.save_only_wrong_preds
         )
         print(recalls_str)
-        self.log('R@1', str(recalls[0]), prog_bar=False, logger=True)
-        self.log('R@5', str(recalls[1]), prog_bar=False, logger=True)
+        self.log('R@1', recalls[0], prog_bar=False, logger=True)
+        self.log('R@5', recalls[1], prog_bar=False, logger=True)
 
 
 
