@@ -54,7 +54,6 @@ class ProxyBank:
     def __init__(self, M, bank=None, dim: int = 128, random_state: int = None):
         if bank is None:
             bank = defaultdict(ProxyBank.Proxy)
-        super().__init__(bank)
         self.__bank = bank
         np.random.seed(random_state)
         self.__index = ProxyBank.Index(faiss.IndexIVFFlat(faiss.IndexFlatIP(dim)))
@@ -96,7 +95,7 @@ class ProxyBank:
 
     class Index:
         def __init__(self, index: faiss.Index, M: int = 10,
-                     similarity: str | callable(torch.Tensor) = "faiss-kNN", **kwargs):
+                     similarity="faiss-kNN", **kwargs):
             self._index = index  # Check if it is better L2 or Inner Product
             self.M = M
             self.__n = 0
@@ -125,7 +124,7 @@ class ProxyBank:
 
 
 class ProxyBatchSampler(BatchSampler):
-    def __init__(self, data_labels, bank=ProxyBank(M=8), batch_size: int = 64,
+    def __init__(self, data_labels=torch.arange(20), bank=ProxyBank(M=8), batch_size: int = 64,
                  M: int = 8, drop_last=True):
         assert batch_size % M == 0
         self.data_labels = data_labels
@@ -135,12 +134,17 @@ class ProxyBatchSampler(BatchSampler):
         self.M = M
         self.drop_last = drop_last
 
+    def set_labels(self, labels, shuffle=True):
+        if shuffle:
+            np.random.shuffle(labels)
+        self.data_labels = labels
+
     def __iter__(self):
         choices = self.bank.sample_places(return_descriptors=False)
         for topM_places_ids in np.random.permutation(choices):
-            batch = [np.random.permutation(np.where(self.data_labels == id))[:self.num_choices] for id in
-                     topM_places_ids]
-            yield batch
+            # batch = [np.random.permutation(np.where(self.data_labels == id))[:self.num_choices] for id in
+            #          topM_places_ids]
+            yield topM_places_ids
 
     def __len__(self):
         return self.batch_size

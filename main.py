@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import torchvision.models
 import pytorch_lightning as pl
+from torch.utils.data import BatchSampler
 from torchvision import transforms as tfm
 from pytorch_metric_learning import losses
 from torch.utils.data.dataloader import DataLoader
@@ -21,7 +22,8 @@ torch.set_float32_matmul_precision("highest")
 
 
 class GeoModel(pl.LightningModule):
-    def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True):
+    def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True,
+                 proxy_bank: utils.ProxyBank = None, proxy_head: utils.ProxyHead = None):
         super().__init__()
         self.val_dataset = val_dataset
         self.test_dataset = test_dataset
@@ -34,8 +36,8 @@ class GeoModel(pl.LightningModule):
         self.model.avgpool = utils.GeM()
         # Instantiate the Proxy Head and Proxy Bank
         if args.enable_gpm:
-            self.phead = utils.ProxyHead(out_dim=128, in_dim=descriptors_dim)
-            self.pbank = utils.ProxyBank(M=10, dim=128)
+            self.phead = proxy_head
+            self.pbank = proxy_bank
         # Set the loss function
         self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
         self.save_hyperparameters()
@@ -111,7 +113,7 @@ class GeoModel(pl.LightningModule):
         self.log('R@5', recalls[1], prog_bar=False, logger=True)
 
 
-def get_datasets_and_dataloaders(args):
+def get_datasets_and_dataloaders(args, batch_sampler=None):
     train_transform = tfm.Compose([
         tfm.RandAugment(num_ops=3),
         tfm.ToTensor(),
@@ -125,8 +127,8 @@ def get_datasets_and_dataloaders(args):
     )
     val_dataset = TestDataset(dataset_folder=args.val_path)
     test_dataset = TestDataset(dataset_folder=args.test_path)
-    train_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, num_workers=args.num_workers,
-                              shuffle=True)
+    train_loader = DataLoader(dataset=train_dataset, num_workers=args.num_workers,
+                              batch_sampler=batch_sampler)
     val_loader = DataLoader(dataset=val_dataset, batch_size=args.batch_size, num_workers=4, shuffle=False)
     test_loader = DataLoader(dataset=test_dataset, batch_size=args.batch_size, num_workers=4, shuffle=False)
     return train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader
@@ -134,10 +136,17 @@ def get_datasets_and_dataloaders(args):
 
 if __name__ == '__main__':
     args = parser.parse_arguments()
+    kwargs = {"descriptors_dim": args.descriptors_dim, "num_preds_to_save": args.num_preds_to_save,
+              "save_only_wrong_preds": args.save_only_wrong_preds}
+    if args.enable_gpm:
+        proxy_bank = utils.ProxyHead(out_dim=128, in_dim=args.descriptors_dim)
+        proxy_head = utils.ProxyBank(M=10, dim=128)
+        batch_sampler = utils.ProxyBatchSampler(bank=proxy_bank, batch_size=args.batch_size, M=args.batch_size / args.img_per_place)
+        kwargs.update({"batch_sampler": batch_sampler, "proxy_bank": proxy_bank, "proxy_head": proxy_head})
 
-    train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args)
-    kwargs = {"val_dataset": val_dataset, "test_dataset": test_dataset, "descriptors_dim": args.descriptors_dim,
-              "num_preds_to_save": args.num_preds_to_save, "save_only_wrong_preds": args.save_only_wrong_preds}
+    train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args, batch_sampler=batch_sampler)
+    batch_sampler.set_labels(train_dataset.places_ids, shuffle=True)
+    kwargs.update({"val_dataset": val_dataset, "test_dataset": test_dataset})
     if args.load_checkpoint:
         model = GeoModel.load_from_checkpoint(args.checkpoint_path + "/" + os.listdir(args.checkpoint_path)[-1])
     else:
@@ -192,7 +201,8 @@ if __name__ == '__main__':
             callbacks=[checkpoint_cb, descriptor_printer_cb],
             # we only run the checkpointing callback (you can add more)
             reload_dataloaders_every_n_epochs=1,  # we reload the dataset to shuffle the order
-            log_every_n_steps=20
+            log_every_n_steps=20,
+
         )
 
     trainer.validate(model=model, dataloaders=val_loader)
