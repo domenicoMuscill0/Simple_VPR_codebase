@@ -2,16 +2,12 @@ import torch
 import numpy as np
 import torchvision.models
 import pytorch_lightning as pl
-from torch.utils.data import BatchSampler
+from pytorch_lightning.trainer.supporters import CombinedLoader
 from torchvision import transforms as tfm
 from pytorch_metric_learning import losses
 from torch.utils.data.dataloader import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
-
 from pytorch_lightning.loggers import NeptuneLogger
-
-import matplotlib.pyplot as plt
-
 import utils
 import parser
 from datasets.test_dataset import TestDataset
@@ -127,8 +123,11 @@ def get_datasets_and_dataloaders(args, batch_sampler=None):
     )
     val_dataset = TestDataset(dataset_folder=args.val_path)
     test_dataset = TestDataset(dataset_folder=args.test_path)
+    # epoch_0_train_set = [train_dataset[np.random.choice(train_dataset.places_ids)] for _ in range(args.img_per_place)]
+    # train_loader0 = DataLoader(dataset=epoch_0_train_set, batch_size=args.batch_size, num_workers=1, shuffle=False)
     train_loader = DataLoader(dataset=train_dataset, num_workers=args.num_workers,
                               batch_sampler=batch_sampler)
+    # train_loader = CombinedLoader({'epoch_0': train_loader0, 'otherwise': train_loader}, 'max_size')
     val_loader = DataLoader(dataset=val_dataset, batch_size=args.batch_size, num_workers=4, shuffle=False)
     test_loader = DataLoader(dataset=test_dataset, batch_size=args.batch_size, num_workers=4, shuffle=False)
     return train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader
@@ -138,11 +137,14 @@ if __name__ == '__main__':
     args = parser.parse_arguments()
     kwargs = {"descriptors_dim": args.descriptors_dim, "num_preds_to_save": args.num_preds_to_save,
               "save_only_wrong_preds": args.save_only_wrong_preds}
+
     if args.enable_gpm:
         proxy_bank = utils.ProxyHead(out_dim=128, in_dim=args.descriptors_dim)
         proxy_head = utils.ProxyBank(M=10, dim=128)
         batch_sampler = utils.ProxyBatchSampler(bank=proxy_bank, batch_size=args.batch_size, M=args.batch_size / args.img_per_place)
         kwargs.update({"batch_sampler": batch_sampler, "proxy_bank": proxy_bank, "proxy_head": proxy_head})
+    else:
+        batch_sampler = None
 
     train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args, batch_sampler=batch_sampler)
     batch_sampler.set_labels(train_dataset.places_ids, shuffle=True)

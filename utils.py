@@ -21,7 +21,7 @@ class ProxyHead(nn.Module):
     def __init__(self, out_dim: int = 128, in_dim: int = 512, n_layers: int = 3):
         super().__init__()
         a, b = in_dim, -np.log(out_dim / in_dim) / n_layers
-        dims = a * np.ceil(np.exp(-b * np.arange(n_layers + 1)))
+        dims = np.ceil(a * np.exp(-b * np.arange(n_layers + 1))).astype(np.int16)
         self.model = [nn.Flatten()] + \
                      [nn.Sequential(nn.Linear(dims[i], dims[i + 1]), nn.ReLU()) for i in range(n_layers)] + \
                      [nn.BatchNorm1d(out_dim)]
@@ -73,7 +73,7 @@ class ProxyBank:
            L: is a list of np.array/torch.Tensor [l_1,...,l_M]
            M: number of places per mini-batch
            l_i: identifier of place P_i that is most similar to the extracted place proxy descriptor c_j"""
-        c_k = np.random.permutation(self.__bank.values())
+        c_k = np.random.permutation(list(self.__bank.values()))
         return self.__index[c_k] if not return_descriptors else self.__index[c_k], c_k
 
     def __len__(self):
@@ -106,11 +106,15 @@ class ProxyBank:
             else:
                 pass
 
-        def __getitem__(self, items) -> tuple:
+        def __getitem__(self, items):
             # We implement without deleting already selected places
             # Returns the ids and not the descriptors
             n = len(items)
-            _, predictions = self._index.search(n, map(lambda it: it.get(), items), self.M)
+            if n == 0:
+                n_places = 23  # counted from gsv_xs
+                return np.random.randint(low=0, high=n_places, size=(n_places // 2, self.M))
+            items = torch.stack(list(map(lambda it: it.get(), items)))
+            _, predictions = self._index.search(items, self.M)
             if not self.__custom_sim:
                 return predictions[0] if n == 1 else predictions
 
