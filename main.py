@@ -6,10 +6,16 @@ from torchvision import transforms as tfm
 from pytorch_metric_learning import losses
 from torch.utils.data.dataloader import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
+
+from pytorch_lightning.loggers import NeptuneLogger
+
+
+import matplotlib.pyplot as plt
+
+import utils
 import parser
 from datasets.test_dataset import TestDataset
 from datasets.train_dataset import TrainDataset
-import utils
 import os
 
 torch.set_float32_matmul_precision("highest")
@@ -106,6 +112,7 @@ class GeoModel(pl.LightningModule):
         self.log('R@5', recalls[1], prog_bar=False, logger=True)
 
 
+
 def get_datasets_and_dataloaders(args):
     train_transform = tfm.Compose([
         tfm.RandAugment(num_ops=3),
@@ -138,7 +145,26 @@ if __name__ == '__main__':
     else:
         model = GeoModel(**kwargs)
 
-    # Model params saving using Pytorch Lightning. Save the best model according to Recall@1
+
+    if args.neptune_api_key:
+        neptune_logger = NeptuneLogger(
+            api_key=args.neptune_api_key,  # replace with your own
+            project="MLDL/geolocalization",  # format "workspace-name/project-name"
+            tags=["training", "resnet", "prove_iniziali", "gem"],  # optional
+            log_model_checkpoints=False,
+        )
+        PARAMS = {
+            "batch_size": args.batch_size,
+            "lr": 0.001,
+            "max_epochs": args.max_epochs,
+        }
+
+        neptune_logger.log_hyperparams(params=PARAMS)
+
+    # Model params saving using Pytorch Lightning. Save the best 3 models according to Recall@1
+
+
+
     checkpoint_cb = ModelCheckpoint(
         monitor='R@1',
         filename='_epoch({epoch:02d})_step({step:04d})_R@1[{val/R@1:.4f}]_R@5[{val/R@5:.4f}]',
@@ -151,18 +177,36 @@ if __name__ == '__main__':
     descriptor_printer_cb = PrintDescriptor(im_path=args.log_path)
 
     # Instantiate a trainer
-    trainer = pl.Trainer(
-        accelerator='gpu',
-        devices=[0],
-        default_root_dir=args.log_path,  # Tensorflow can be used to viz
-        num_sanity_val_steps=0,  # runs a validation step before stating training
-        precision=16,  # we use half precision to reduce  memory usage
-        max_epochs=args.max_epochs,
-        check_val_every_n_epoch=1,  # run validation every epoch
-        callbacks=[checkpoint_cb, descriptor_printer_cb],  # we only run the checkpointing callback (you can add more)
-        reload_dataloaders_every_n_epochs=1,  # we reload the dataset to shuffle the order
-        log_every_n_steps=20
-    )
+
+    if args.neptune_api_key:
+        trainer = pl.Trainer(
+            accelerator='gpu',
+            devices=[0],
+            default_root_dir=args.log_path,  # Tensorflow can be used to viz
+            num_sanity_val_steps=0,  # runs a validation step before stating training
+            precision=16,  # we use half precision to reduce  memory usage
+            max_epochs=args.max_epochs,
+            check_val_every_n_epoch=1,  # run validation every epoch
+            callbacks=[checkpoint_cb,descriptor_printer_cb],  # we only run the checkpointing callback (you can add more)
+            reload_dataloaders_every_n_epochs=1,  # we reload the dataset to shuffle the order
+            log_every_n_steps=20,
+            logger=neptune_logger
+        )
+    else:
+        trainer = pl.Trainer(
+            accelerator='gpu',
+            devices=[0],
+            default_root_dir=args.log_path,  # Tensorflow can be used to viz
+            num_sanity_val_steps=0,  # runs a validation step before stating training
+            precision=16,  # we use half precision to reduce  memory usage
+            max_epochs=args.max_epochs,
+            check_val_every_n_epoch=1,  # run validation every epoch
+            callbacks=[checkpoint_cb, descriptor_printer_cb],
+            # we only run the checkpointing callback (you can add more)
+            reload_dataloaders_every_n_epochs=1,  # we reload the dataset to shuffle the order
+            log_every_n_steps=20
+        )
+
     trainer.validate(model=model, dataloaders=val_loader)
     trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
     trainer.test(model=model, dataloaders=test_loader)
