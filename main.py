@@ -2,58 +2,17 @@ import torch
 import numpy as np
 import torchvision.models
 import pytorch_lightning as pl
-from torch import nn
-import torch.nn.functional as F
 from torchvision import transforms as tfm
 from pytorch_metric_learning import losses
 from torch.utils.data.dataloader import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
-import matplotlib.pyplot as plt
-import utils
 import parser
 from datasets.test_dataset import TestDataset
 from datasets.train_dataset import TrainDataset
+import utils
 import os
 
 torch.set_float32_matmul_precision("highest")
-
-
-class GeM(nn.Module):
-    def __init__(self, p=3, eps=1e-6):
-        super(GeM, self).__init__()
-        self.p = nn.Parameter(torch.ones(1) * p)
-        self.eps = eps
-
-    def forward(self, x):
-        return self.gem(x, p=self.p, eps=self.eps)
-
-    def gem(self, x, p=3, eps=1e-6):
-        return F.avg_pool2d(x.clamp(min=eps).pow(p), (x.size(-2), x.size(-1))).pow(1. / p)
-
-    def __repr__(self):
-        return self.__class__.__name__ + '(' + 'p=' + '{:.4f}'.format(self.p.data.tolist()[0]) + ', ' + 'eps=' + str(
-            self.eps) + ')'
-
-
-class PrintDescriptor(pl.Callback):
-    def __init__(self, n_images: int = 2):
-        self.n_images = n_images
-
-    def on_test_batch_end(
-            self,
-            trainer: "pl.Trainer",
-            pl_module: "pl.LightningModule",
-            outputs,  # Training step output
-            batch,
-            batch_idx: int,
-            dataloader_idx: int = 0):
-        images, labels = batch
-        for i in range(self.n_images):
-            descriptor = pl_module(images[i])
-            descriptor = descriptor.reshape(descriptor.size(-2), descriptor.size(-1), 3)
-            plt.imsave(args.log_path + f"/descriptors/P:{labels[i]}_B:{batch_idx}", descriptor)
-            # Add an epoch variable to see how descriptors change?
-            plt.imshow(descriptor)
 
 
 class GeoModel(pl.LightningModule):
@@ -67,12 +26,18 @@ class GeoModel(pl.LightningModule):
         self.model = torchvision.models.resnet18(weights=torchvision.models.ResNet18_Weights.DEFAULT)
         # Change the output of the FC layer to the desired descriptors dimension
         self.model.fc = torch.nn.Linear(self.model.fc.in_features, descriptors_dim)
-        self.model.avgpool = GeM()
+        self.model.avgpool = utils.GeM()
+        # Instantiate the Proxy Head and Proxy Bank
+        if args.enable_gpm:
+            self.phead = utils.ProxyHead(out_dim=128, in_dim=descriptors_dim)
+            self.pbank = utils.ProxyBank(M=10, dim=128)
         # Set the loss function
         self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
         self.save_hyperparameters()
 
     def forward(self, images):
+        # Ask if in the GPM paper use the descriptors or the compressed representation.
+        # Ask also if we store in the proxy bank the places proxies of only one batch or all the batches
         descriptors = self.model(images)
         return descriptors
 
@@ -93,7 +58,15 @@ class GeoModel(pl.LightningModule):
         labels = labels.view(num_places * num_images_per_place)
 
         # Feed forward the batch to the model
-        descriptors = self(images)  # Here we are calling the method forward that we defined above
+        if args.enable_gpm:
+            # We use place labels instead of compressed descriptors in order to enhance the connection
+            # between compressed representation and gpm focus on retrieving highly informative mini-batches
+            descriptors = self(images)
+            compressed_descriptors = self.phead(descriptors)
+            self.phead.fit(descriptors, labels)
+            self.pbank.update_bank(compressed_descriptors, labels)
+        else:
+            descriptors = self(images)  # Here we are calling the method forward that we defined above
         loss = self.loss_function(descriptors, labels)  # Call the loss_function we defined above
 
         self.log('loss', loss.item(), logger=True)
@@ -175,7 +148,7 @@ if __name__ == '__main__':
         mode='max'
     )
 
-    descriptor_printer_cb = PrintDescriptor()
+    descriptor_printer_cb = PrintDescriptor(im_path=args.log_path)
 
     # Instantiate a trainer
     trainer = pl.Trainer(
