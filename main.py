@@ -9,7 +9,6 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 from pytorch_lightning.loggers import NeptuneLogger
 
-
 import matplotlib.pyplot as plt
 
 import utils
@@ -112,7 +111,6 @@ class GeoModel(pl.LightningModule):
         self.log('R@5', recalls[1], prog_bar=False, logger=True)
 
 
-
 def get_datasets_and_dataloaders(args):
     train_transform = tfm.Compose([
         tfm.RandAugment(num_ops=3),
@@ -145,7 +143,16 @@ if __name__ == '__main__':
     else:
         model = GeoModel(**kwargs)
 
+    checkpoint_cb = ModelCheckpoint(
+        monitor='R@1',
+        filename='_epoch({epoch:02d})_step({step:04d})_R@1[{val/R@1:.4f}]_R@5[{val/R@5:.4f}]',
+        auto_insert_metric_name=False,
+        save_weights_only=True,
+        save_top_k=1,
+        mode='max'
+    )
 
+    descriptor_printer_cb = utils.PrintDescriptor(im_path=args.log_path)
     if args.neptune_api_key:
         neptune_logger = NeptuneLogger(
             api_key=args.neptune_api_key,  # replace with your own
@@ -160,25 +167,6 @@ if __name__ == '__main__':
         }
 
         neptune_logger.log_hyperparams(params=PARAMS)
-
-    # Model params saving using Pytorch Lightning. Save the best 3 models according to Recall@1
-
-
-
-    checkpoint_cb = ModelCheckpoint(
-        monitor='R@1',
-        filename='_epoch({epoch:02d})_step({step:04d})_R@1[{val/R@1:.4f}]_R@5[{val/R@5:.4f}]',
-        auto_insert_metric_name=False,
-        save_weights_only=True,
-        save_top_k=1,
-        mode='max'
-    )
-
-    descriptor_printer_cb = PrintDescriptor(im_path=args.log_path)
-
-    # Instantiate a trainer
-
-    if args.neptune_api_key:
         trainer = pl.Trainer(
             accelerator='gpu',
             devices=[0],
@@ -187,7 +175,7 @@ if __name__ == '__main__':
             precision=16,  # we use half precision to reduce  memory usage
             max_epochs=args.max_epochs,
             check_val_every_n_epoch=1,  # run validation every epoch
-            callbacks=[checkpoint_cb,descriptor_printer_cb],  # we only run the checkpointing callback (you can add more)
+            callbacks=[checkpoint_cb, descriptor_printer_cb],
             reload_dataloaders_every_n_epochs=1,  # we reload the dataset to shuffle the order
             log_every_n_steps=20,
             logger=neptune_logger
