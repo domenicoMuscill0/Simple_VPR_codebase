@@ -15,8 +15,8 @@ def parse_arguments():
                         help="stop when training reaches max_epochs")
     parser.add_argument("--num_workers", type=int, default=8,
                         help="number of processes to use for data loading / preprocessing")
-    parser.add_argument("--load_checkpoint", default=False, action=argparse.BooleanOptionalAction,
-                        help="whether to load pytorch lightning checkpoints")
+    # parser.add_argument("--load_checkpoint", default=False, action=argparse.BooleanOptionalAction,
+    #                     help="whether to load pytorch lightning checkpoints")
 
     # Architecture parameters
     parser.add_argument("--descriptors_dim", type=int, default=512,
