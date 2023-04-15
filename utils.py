@@ -56,7 +56,7 @@ class ProxyBank:
             bank = defaultdict(ProxyBank.Proxy)
         self.__bank = bank
         np.random.seed(random_state)
-        self.__index = ProxyBank.Index(faiss.IndexIVFFlat(faiss.IndexFlatIP(dim)))
+        self.__index = ProxyBank.Index(faiss.IndexIDMap(faiss.IndexFlatIP(dim)))
         self.M = M
 
     def update_bank(self, descriptors, labels):
@@ -145,7 +145,7 @@ class ProxyBatchSampler(BatchSampler):
 
     def __iter__(self):
         choices = self.bank.sample_places(return_descriptors=False)
-        for topM_places_ids in np.random.permutation(choices):
+        for topM_places_ids in np.random.permutation(choices).astype(object):
             # batch = [np.random.permutation(np.where(self.data_labels == id))[:self.num_choices] for id in
             #          topM_places_ids]
             yield topM_places_ids

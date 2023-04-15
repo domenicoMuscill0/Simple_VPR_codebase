@@ -139,10 +139,10 @@ if __name__ == '__main__':
               "save_only_wrong_preds": args.save_only_wrong_preds}
 
     if args.enable_gpm:
-        proxy_bank = utils.ProxyHead(out_dim=128, in_dim=args.descriptors_dim)
-        proxy_head = utils.ProxyBank(M=10, dim=128)
+        proxy_head = utils.ProxyHead(out_dim=128, in_dim=args.descriptors_dim)
+        proxy_bank = utils.ProxyBank(M=10, dim=128)
         batch_sampler = utils.ProxyBatchSampler(bank=proxy_bank, batch_size=args.batch_size, M=args.batch_size / args.img_per_place)
-        kwargs.update({"batch_sampler": batch_sampler, "proxy_bank": proxy_bank, "proxy_head": proxy_head})
+        kwargs.update({"proxy_bank": proxy_bank, "proxy_head": proxy_head})
     else:
         batch_sampler = None
 
