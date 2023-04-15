@@ -40,27 +40,6 @@ class GeM(nn.Module):
             self.eps) + ')'
 
 
-class PrintDescriptor(pl.Callback):
-    def __init__(self, n_images: int = 2):
-        self.n_images = n_images
-
-    def on_test_batch_end(
-            self,
-            trainer: "pl.Trainer",
-            pl_module: "pl.LightningModule",
-            outputs,  # Training step output
-            batch,
-            batch_idx: int,
-            dataloader_idx: int = 0):
-        images, labels = batch
-        for i in range(self.n_images):
-            descriptor = pl_module(images[i])
-            descriptor = descriptor.reshape(descriptor.size(-2), descriptor.size(-1), 3)
-            plt.imsave(args.log_path + f"/descriptors/P:{labels[i]}_B:{batch_idx}", descriptor)
-            # Add an epoch variable to see how descriptors change?
-            plt.imshow(descriptor)
-
-
 class GeoModel(pl.LightningModule):
     def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True):
         super().__init__()
@@ -69,6 +48,7 @@ class GeoModel(pl.LightningModule):
         self.num_preds_to_save = num_preds_to_save
         self.save_only_wrong_preds = save_only_wrong_preds
         # Use a pretrained model
+        # provare transfer learning freezando la resnet coi pesi scaricati
         self.model = torchvision.models.resnet18(weights=torchvision.models.ResNet18_Weights.DEFAULT)
         # Change the output of the FC layer to the desired descriptors dimension
         self.model.fc = torch.nn.Linear(self.model.fc.in_features, descriptors_dim)
@@ -166,17 +146,20 @@ if __name__ == '__main__':
     train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args)
     kwargs = {"val_dataset": val_dataset, "test_dataset": test_dataset, "descriptors_dim": args.descriptors_dim,
               "num_preds_to_save": args.num_preds_to_save, "save_only_wrong_preds": args.save_only_wrong_preds}
-    if args.load_checkpoint:
+    if args.load_checkpoint == "yes":
         model = GeoModel.load_from_checkpoint(args.checkpoint_path + "/" + os.listdir(args.checkpoint_path)[-1])
-    else:
+    elif args.load_checkpoint == "no":
         model = GeoModel(**kwargs)
+    else:
+        print("Error, no valid load checkpoint string")
+        os.exit()
 
 
     if args.neptune_api_key:
         neptune_logger = NeptuneLogger(
             api_key=args.neptune_api_key,  # replace with your own
             project="MLDL/geolocalization",  # format "workspace-name/project-name"
-            tags=["training", "resnet", "prove_iniziali", "gem"],  # optional
+            tags=["training", "resnet", "prove_loss", "gem", "contrastive-loss"],  # optional
             log_model_checkpoints=False,
         )
         PARAMS = {
@@ -200,20 +183,19 @@ if __name__ == '__main__':
         mode='max'
     )
 
-    descriptor_printer_cb = PrintDescriptor()
 
     # Instantiate a trainer
 
     if args.neptune_api_key:
         trainer = pl.Trainer(
             accelerator='gpu',
-            devices=[0],
+            devices=-1,
             default_root_dir=args.log_path,  # Tensorflow can be used to viz
             num_sanity_val_steps=0,  # runs a validation step before stating training
             precision=16,  # we use half precision to reduce  memory usage
             max_epochs=args.max_epochs,
             check_val_every_n_epoch=1,  # run validation every epoch
-            callbacks=[checkpoint_cb,descriptor_printer_cb],  # we only run the checkpointing callback (you can add more)
+            callbacks=[checkpoint_cb],  # we only run the checkpointing callback (you can add more)
             reload_dataloaders_every_n_epochs=1,  # we reload the dataset to shuffle the order
             log_every_n_steps=20,
             logger=neptune_logger
@@ -221,13 +203,13 @@ if __name__ == '__main__':
     else:
         trainer = pl.Trainer(
             accelerator='gpu',
-            devices=[0],
+            devices=-1,
             default_root_dir=args.log_path,  # Tensorflow can be used to viz
             num_sanity_val_steps=0,  # runs a validation step before stating training
             precision=16,  # we use half precision to reduce  memory usage
             max_epochs=args.max_epochs,
             check_val_every_n_epoch=1,  # run validation every epoch
-            callbacks=[checkpoint_cb, descriptor_printer_cb],
+            callbacks=[checkpoint_cb],
             # we only run the checkpointing callback (you can add more)
             reload_dataloaders_every_n_epochs=1,  # we reload the dataset to shuffle the order
             log_every_n_steps=20
