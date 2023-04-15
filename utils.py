@@ -18,7 +18,8 @@ RECALL_VALUES = [1, 5, 10, 20]
 
 
 class ProxyHead(nn.Module):
-    def __init__(self, out_dim: int = 128, in_dim: int = 512, n_layers: int = 3):
+    def __init__(self, out_dim: int = 128, in_dim: int = 512,
+    n_classes: int = 23, n_layers: int = 3):
         super().__init__()
         a, b = in_dim, -np.log(out_dim / in_dim) / n_layers
         dims = np.ceil(a * np.exp(-b * np.arange(n_layers + 1))).astype(np.int16)
@@ -26,16 +27,16 @@ class ProxyHead(nn.Module):
                      [nn.Sequential(nn.Linear(dims[i], dims[i + 1]), nn.ReLU()) for i in range(n_layers)] + \
                      [nn.BatchNorm1d(out_dim)]
         self.model = nn.Sequential(*self.model)
-        self.loss_fn = losses.VICRegLoss()
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=0.001, weight_decay=0.001)
+        self.loss_fn = losses.ArcFaceLoss(n_classes, out_dim)
+        self.optimizer = torch.optim.Adam(self.loss_fn.parameters(), lr=0.001, weight_decay=0.001)
 
     def forward(self, images):
         descriptors = self.model(images)
         return descriptors
 
     #  The loss function call (this method will be called at each training iteration)
-    def loss_function(self, descriptors, labels):
-        loss = self.loss_fn(descriptors, labels)
+    def loss_function(self, compressed_descriptors, labels):
+        loss = self.loss_fn(compressed_descriptors, labels)
         return loss
 
     def fit(self, descriptors, labels, epochs: int = 20):
@@ -43,7 +44,7 @@ class ProxyHead(nn.Module):
             compressed_descriptors = self(descriptors)
             loss = self.loss_fn(compressed_descriptors, labels)
             self.optimizer.zero_grad()
-            loss.backward()
+            loss.backward(retain_graph=True)
             self.optimizer.step()
 
 
@@ -65,7 +66,10 @@ class ProxyBank:
         for d, l in zip(descriptors, labels):
             self.__bank[l] = self.__bank[l] + ProxyBank.Proxy(d)
         self.__index.reset()
-        self.__index.add_with_ids(self.__bank.values(), self.__bank.keys())
+        bank = tuple(map(lambda it: it.get().cpu().detach(), self.__bank.values()))
+        ids = list(map(lambda it: it.cpu().detach(), self.__bank.keys()))
+        print("Ecchime", ids)
+        self.__index.add_with_ids(torch.stack(bank), ids)
 
     def sample_places(self, return_descriptors=False):
         """This function returns the pair (L, c_j) sampled from the underlying index, where:
@@ -85,10 +89,15 @@ class ProxyBank:
                 self.__arch = torch.zeros(dim)
             else:
                 self.__arch = tensor
+            self.__arch = self.__arch.cuda()
             self.__n = n
 
-        def get(self, numpy: bool = False):
-            return self.__arch / self.__n if not numpy else (self.__arch / self.__n).cpu().numpy().astype(np.float32)
+        @property
+        def get_shape(self):
+          return self.__arch.shape
+
+        def get(self):
+            return self.__arch / self.__n
 
         def __add__(self, other):
             return ProxyBank.Proxy(tensor=self.__arch + other.__arch, n=self.__n + other.__n)
@@ -113,6 +122,7 @@ class ProxyBank:
             if n == 0:
                 n_places = 23  # counted from gsv_xs
                 return np.random.randint(low=0, high=n_places, size=(n_places // 2, self.M))
+            print("AOOOOOOOOOOOOOOOOOO1", items)
             items = torch.stack(list(map(lambda it: it.get(), items)))
             _, predictions = self._index.search(items, self.M)
             if not self.__custom_sim:
@@ -124,7 +134,7 @@ class ProxyBank:
         def add_with_ids(self, bank, ids):
             n = len(bank)
             self.__n += n
-            self._index.add_with_ids(n, bank, ids)
+            self._index.add_with_ids(bank, ids)
 
 
 class ProxyBatchSampler(BatchSampler):
@@ -144,10 +154,12 @@ class ProxyBatchSampler(BatchSampler):
         self.data_labels = labels
 
     def __iter__(self):
-        choices = self.bank.sample_places(return_descriptors=False)
-        for topM_places_ids in np.random.permutation(choices).astype(object):
+        choices, _ = self.bank.sample_places(return_descriptors=False)
+        print("AOOOOOOOOOOOOOOOOOO2", choices)
+        for topM_places_ids in np.random.permutation(choices):
             # batch = [np.random.permutation(np.where(self.data_labels == id))[:self.num_choices] for id in
             #          topM_places_ids]
+            print("AOOOOOOOOOOOOOOO3", topM_places_ids)
             yield topM_places_ids
 
     def __len__(self):

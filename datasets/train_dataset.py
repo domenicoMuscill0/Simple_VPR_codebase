@@ -45,15 +45,16 @@ class TrainDataset(Dataset):
         self.total_num_images = sum([len(paths) for paths in self.dict_place_paths.values()])
 
     def __getitem__(self, index):
-        print(index)
         images = []
         labels = []
-        for i in index:
-          place_id = self.places_ids[i]
-          all_paths_from_place_id = self.dict_place_paths[place_id]
-          chosen_paths = np.random.choice(all_paths_from_place_id, self.img_per_place)
-          images += [self.transform(Image.open(path).convert('RGB')) for path in chosen_paths]
-          labels.append(torch.tensor(place_id).repeat(self.img_per_place))
+        print("AOOOOOOOOOOOOOO4", index)
+        place_id = self.places_ids[index]
+        print("yess", place_id)
+        all_paths_from_place_id = self.dict_place_paths[place_id]
+        print("yesss", len(all_paths_from_place_id))
+        chosen_paths = np.random.choice(all_paths_from_place_id, self.img_per_place)
+        images += [self.transform(Image.open(path).convert('RGB')) for path in chosen_paths]
+        labels.append(torch.tensor(index).repeat(self.img_per_place))  # using tensors for single numbers
         return torch.stack(images), torch.stack(labels)
 
     def __len__(self):
