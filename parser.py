@@ -15,14 +15,18 @@ def parse_arguments():
                         help="stop when training reaches max_epochs")
     parser.add_argument("--num_workers", type=int, default=8,
                         help="number of processes to use for data loading / preprocessing")
-    parser.add_argument("--load_checkpoint", default=False, action=argparse.BooleanOptionalAction,
+    parser.add_argument("--load_checkpoint", default=False, #action=argparse.BooleanOptionalAction,
                         help="whether to load pytorch lightning checkpoints")
 
     # Architecture parameters
     parser.add_argument("--descriptors_dim", type=int, default=512,
                         help="dimensionality of the output descriptors")
-    parser.add_argument("--enable_gpm", default=False, action=argparse.BooleanOptionalAction,
-                        help="whether to adopt Global Proxy Mining module")
+    # parser.add_argument("--enable_gpm", default=False, action=argparse.BooleanOptionalAction,
+    #                     help="whether to adopt Global Proxy Mining module")
+    # Kaggle merda. Se usi Colab usa l'altra versione
+    parser.add_argument('--enable_gpm', action='store_true')
+    parser.add_argument('--no-enable_gpm', dest='enable_gpm', action='store_false')
+    parser.set_defaults(enable_gpm=True)
     
     # Visualizations parameters
     parser.add_argument("--num_preds_to_save", type=int, default=0,
