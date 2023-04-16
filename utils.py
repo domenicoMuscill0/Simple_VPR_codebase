@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from matplotlib import pyplot as plt
 from torch.utils.data import BatchSampler
 import visualizations
-from Simple_VPR_codebase.datasets.test_dataset import TestDataset
+from datasets.test_dataset import TestDataset
 
 # Compute R@1, R@5, R@10, R@20
 RECALL_VALUES = [1, 5, 10, 20]
