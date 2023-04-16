@@ -28,7 +28,7 @@ class TrainDataset(Dataset):
             raise FileNotFoundError(f"There are no images under {dataset_folder} , you should change this path")
         self.dict_place_paths = defaultdict(list)
         for image_path in self.images_paths:
-            place_id = image_path.split("@")[-2]
+            place_id = image_path.split("$")[-2]
             self.dict_place_paths[place_id].append(image_path)
 
         assert img_per_place <= min_img_per_place, \
@@ -46,16 +46,15 @@ class TrainDataset(Dataset):
 
     def __getitem__(self, index):
         images = []
-        labels = []
-        print("AOOOOOOOOOOOOOO4", index)
+        # print("AOOOOOOOOOOOOOO4", index)
         place_id = self.places_ids[index]
-        print("yess", place_id)
+        # print("yess", place_id)
         all_paths_from_place_id = self.dict_place_paths[place_id]
-        print("yesss", len(all_paths_from_place_id))
+        # print("yesss", len(all_paths_from_place_id))
         chosen_paths = np.random.choice(all_paths_from_place_id, self.img_per_place)
         images += [self.transform(Image.open(path).convert('RGB')) for path in chosen_paths]
-        labels.append(torch.tensor(index).repeat(self.img_per_place))  # using tensors for single numbers
-        return torch.stack(images), torch.stack(labels)
+        labels = [index] * self.img_per_place
+        return torch.stack(images), labels
 
     def __len__(self):
         """Denotes the total number of places (not images)"""

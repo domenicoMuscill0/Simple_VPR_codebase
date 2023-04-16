@@ -2,7 +2,6 @@ import torch
 import numpy as np
 import torchvision.models
 import pytorch_lightning as pl
-from pytorch_lightning.trainer.supporters import CombinedLoader
 from torchvision import transforms as tfm
 from pytorch_metric_learning import losses
 from torch.utils.data.dataloader import DataLoader
@@ -58,7 +57,7 @@ class GeoModel(pl.LightningModule):
         images, labels = batch
         num_places, num_images_per_place, C, H, W = images.shape
         images = images.view(num_places * num_images_per_place, C, H, W)
-        labels = labels.view(num_places * num_images_per_place)
+        # labels = labels.view(num_places * num_images_per_place)
 
         # Feed forward the batch to the model
         if args.enable_gpm:
@@ -66,11 +65,13 @@ class GeoModel(pl.LightningModule):
             # between compressed representation and gpm focus on retrieving highly informative mini-batches
             descriptors = self(images)
             compressed_descriptors = self.phead(descriptors)
+            labels = torch.flatten(torch.stack(labels))
+            # print("Labels:", labels)
             self.phead.fit(descriptors, labels)
             self.pbank.update_bank(compressed_descriptors, labels)
         else:
             descriptors = self(images)  # Here we are calling the method forward that we defined above
-        loss = self.loss_function(descriptors, labels)  # Call the loss_function we defined above
+        loss = self.loss_function(descriptors, torch.Tensor(labels))  # Call the loss_function we defined above
 
         self.log('loss', loss.item(), logger=True)
         return {'loss': loss}
@@ -109,7 +110,7 @@ class GeoModel(pl.LightningModule):
         self.log('R@5', recalls[1], prog_bar=False, logger=True)
 
 
-def get_datasets_and_dataloaders(args, batch_sampler=None):
+def get_datasets_and_dataloaders(args):
     train_transform = tfm.Compose([
         tfm.RandAugment(num_ops=3),
         tfm.ToTensor(),
@@ -123,11 +124,7 @@ def get_datasets_and_dataloaders(args, batch_sampler=None):
     )
     val_dataset = TestDataset(dataset_folder=args.val_path)
     test_dataset = TestDataset(dataset_folder=args.test_path)
-    # epoch_0_train_set = [train_dataset[np.random.choice(train_dataset.places_ids)] for _ in range(args.img_per_place)]
-    # train_loader0 = DataLoader(dataset=epoch_0_train_set, batch_size=args.batch_size, num_workers=1, shuffle=False)
-    train_loader = DataLoader(dataset=train_dataset, num_workers=args.num_workers,
-                              batch_sampler=batch_sampler)
-    # train_loader = CombinedLoader({'epoch_0': train_loader0, 'otherwise': train_loader}, 'max_size')
+    train_loader = DataLoader(dataset=train_dataset, num_workers=args.num_workers)
     val_loader = DataLoader(dataset=val_dataset, batch_size=args.batch_size, num_workers=4, shuffle=False)
     test_loader = DataLoader(dataset=test_dataset, batch_size=args.batch_size, num_workers=4, shuffle=False)
     return train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader
@@ -138,16 +135,19 @@ if __name__ == '__main__':
     kwargs = {"descriptors_dim": args.descriptors_dim, "num_preds_to_save": args.num_preds_to_save,
               "save_only_wrong_preds": args.save_only_wrong_preds}
 
+    train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args)
     if args.enable_gpm:
         proxy_head = utils.ProxyHead(out_dim=128, in_dim=args.descriptors_dim)
         proxy_bank = utils.ProxyBank(M=10, dim=128)
-        batch_sampler = utils.ProxyBatchSampler(bank=proxy_bank, batch_size=args.batch_size, M=args.batch_size / args.img_per_place)
+        batch_sampler = utils.ProxyBatchSampler(bank=proxy_bank, batch_size=args.batch_size,
+                                                img_per_place=args.img_per_place)
+        batch_sampler.set_labels(train_dataset.places_ids, shuffle=True)
         kwargs.update({"proxy_bank": proxy_bank, "proxy_head": proxy_head})
     else:
         batch_sampler = None
 
-    train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args, batch_sampler=batch_sampler)
-    batch_sampler.set_labels(train_dataset.places_ids, shuffle=True)
+    train_loader.batch_sampler = batch_sampler
+
     kwargs.update({"val_dataset": val_dataset, "test_dataset": test_dataset})
     if args.load_checkpoint:
         model = GeoModel.load_from_checkpoint(args.checkpoint_path + "/" + os.listdir(args.checkpoint_path)[-1])
@@ -189,7 +189,8 @@ if __name__ == '__main__':
             callbacks=[checkpoint_cb, descriptor_printer_cb],
             reload_dataloaders_every_n_epochs=1,  # we reload the dataset to shuffle the order
             log_every_n_steps=20,
-            logger=neptune_logger
+            logger=neptune_logger,
+            limit_train_batches=len(train_dataset) if args.enable_gpm else None
         )
     else:
         trainer = pl.Trainer(
@@ -204,9 +205,9 @@ if __name__ == '__main__':
             # we only run the checkpointing callback (you can add more)
             reload_dataloaders_every_n_epochs=1,  # we reload the dataset to shuffle the order
             log_every_n_steps=20,
-
+            limit_train_batches=len(train_dataset) if args.enable_gpm else None
         )
 
-    trainer.validate(model=model, dataloaders=val_loader)
+    # trainer.validate(model=model, dataloaders=val_loader)
     trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
     trainer.test(model=model, dataloaders=test_loader)

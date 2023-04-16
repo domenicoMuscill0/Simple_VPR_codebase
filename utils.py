@@ -1,4 +1,3 @@
-
 from collections import defaultdict
 import faiss
 import logging
@@ -10,8 +9,9 @@ from pytorch_metric_learning import losses
 from torch import nn
 import torch.nn.functional as F
 from matplotlib import pyplot as plt
-from torch.utils.data import Dataset, BatchSampler
+from torch.utils.data import BatchSampler
 import visualizations
+from Simple_VPR_codebase.datasets.test_dataset import TestDataset
 
 # Compute R@1, R@5, R@10, R@20
 RECALL_VALUES = [1, 5, 10, 20]
@@ -19,7 +19,7 @@ RECALL_VALUES = [1, 5, 10, 20]
 
 class ProxyHead(nn.Module):
     def __init__(self, out_dim: int = 128, in_dim: int = 512,
-    n_classes: int = 23, n_layers: int = 3):
+                 n_classes: int = 23, n_layers: int = 3):
         super().__init__()
         a, b = in_dim, -np.log(out_dim / in_dim) / n_layers
         dims = np.ceil(a * np.exp(-b * np.arange(n_layers + 1))).astype(np.int16)
@@ -63,12 +63,13 @@ class ProxyBank:
     def update_bank(self, descriptors, labels):
         """This method adds descriptors and labels retrieved at each batch training step end to the underlying bank
            and the proxy index is updated."""
+        # print("Le labels nella banca:", labels)
         for d, l in zip(descriptors, labels):
-            self.__bank[l] = self.__bank[l] + ProxyBank.Proxy(d)
+            self.__bank[l.item()] = self.__bank[l.item()] + ProxyBank.Proxy(d)
         self.__index.reset()
         bank = tuple(map(lambda it: it.get().cpu().detach(), self.__bank.values()))
-        ids = list(map(lambda it: it.cpu().detach(), self.__bank.keys()))
-        print("Ecchime", ids)
+        ids = list(self.__bank.keys())
+        # print("Ecchime", ids)
         self.__index.add_with_ids(torch.stack(bank), ids)
 
     def sample_places(self, return_descriptors=False):
@@ -77,14 +78,15 @@ class ProxyBank:
            L: is a list of np.array/torch.Tensor [l_1,...,l_M]
            M: number of places per mini-batch
            l_i: identifier of place P_i that is most similar to the extracted place proxy descriptor c_j"""
-        c_k = np.random.permutation(list(self.__bank.values()))
+        c_k = np.random.permutation(self.__bank.values())
+        # print("Le labels nella banca sono:",list(map(lambda k: k, self.__bank.keys())))
         return self.__index[c_k] if not return_descriptors else self.__index[c_k], c_k
 
     def __len__(self):
         return len(self.__bank.values())
 
     class Proxy:
-        def __init__(self, tensor: torch.Tensor = None, n: int = 0, dim: int = 128):
+        def __init__(self, tensor: torch.Tensor = None, n: int = 1, dim: int = 128):
             if tensor is None:
                 self.__arch = torch.zeros(dim)
             else:
@@ -94,7 +96,7 @@ class ProxyBank:
 
         @property
         def get_shape(self):
-          return self.__arch.shape
+            return self.__arch.shape
 
         def get(self):
             return self.__arch / self.__n
@@ -103,17 +105,16 @@ class ProxyBank:
             return ProxyBank.Proxy(tensor=self.__arch + other.__arch, n=self.__n + other.__n)
 
     class Index:
-        def __init__(self, index: faiss.Index, M: int = 10,
+        def __init__(self, index: faiss.Index, top_places: int = 8,  # top_places must be batch_size / img_per_place
                      similarity="faiss-kNN", **kwargs):
             self._index = index  # Check if it is better L2 or Inner Product
-            self.M = M
-            self.__n = 0
+            self.top_places = top_places
 
             if not isinstance(similarity, str):
                 self.__custom_sim = True
                 self.similarity = similarity
             else:
-                pass
+                self.__custom_sim = False
 
         def __getitem__(self, items):
             # We implement without deleting already selected places
@@ -121,10 +122,10 @@ class ProxyBank:
             n = len(items)
             if n == 0:
                 n_places = 23  # counted from gsv_xs
-                return np.random.randint(low=0, high=n_places, size=(n_places // 2, self.M))
-            print("AOOOOOOOOOOOOOOOOOO1", items)
-            items = torch.stack(list(map(lambda it: it.get(), items)))
-            _, predictions = self._index.search(items, self.M)
+                return np.random.randint(low=0, high=n_places, size=(n_places // 2, self.top_places))
+            items = torch.stack(list(map(lambda it: it.get().cpu().detach(), items)))
+            _, predictions = self._index.search(items, self.top_places)  # returns top top_places for each query
+            # print("AOOOOOOOOOOOOOOOOOO1", len(items), predictions)
             if not self.__custom_sim:
                 return predictions[0] if n == 1 else predictions
 
@@ -132,20 +133,18 @@ class ProxyBank:
             self._index.reset()
 
         def add_with_ids(self, bank, ids):
-            n = len(bank)
-            self.__n += n
             self._index.add_with_ids(bank, ids)
 
 
 class ProxyBatchSampler(BatchSampler):
-    def __init__(self, data_labels=torch.arange(20), bank=ProxyBank(M=8), batch_size: int = 64,
-                 M: int = 8, drop_last=True):
-        assert batch_size % M == 0
+    def __init__(self, sampler=None, data_labels=torch.arange(20), bank=ProxyBank(M=8),
+                 batch_size: int = 64, img_per_place: int = 8, drop_last=True):
+        super().__init__(sampler, batch_size, drop_last)
+        assert batch_size % img_per_place == 0
         self.data_labels = data_labels
         self.bank = bank
         self.batch_size = batch_size
-        self.num_choices = batch_size // M
-        self.M = M
+        self.img_per_place = img_per_place
         self.drop_last = drop_last
 
     def set_labels(self, labels, shuffle=True):
@@ -154,12 +153,14 @@ class ProxyBatchSampler(BatchSampler):
         self.data_labels = labels
 
     def __iter__(self):
+        # choices contains an entire epoch in the form of sequences of place ids. The dataset will extract img_per_place
+        # images for each place
         choices, _ = self.bank.sample_places(return_descriptors=False)
-        print("AOOOOOOOOOOOOOOOOOO2", choices)
+        # print("AOOOOOOOOOOOOOOOOOO2", choices)
         for topM_places_ids in np.random.permutation(choices):
             # batch = [np.random.permutation(np.where(self.data_labels == id))[:self.num_choices] for id in
             #          topM_places_ids]
-            print("AOOOOOOOOOOOOOOO3", topM_places_ids)
+            # print("AOOOOOOOOOOOOOOO3", topM_places_ids)
             yield topM_places_ids
 
     def __len__(self):
@@ -205,7 +206,7 @@ class PrintDescriptor(pl.Callback):
             plt.imshow(descriptor)
 
 
-def compute_recalls(eval_ds: Dataset, queries_descriptors: np.ndarray, database_descriptors: np.ndarray,
+def compute_recalls(eval_ds: TestDataset, queries_descriptors: np.ndarray, database_descriptors: np.ndarray,
                     output_folder: str = None, num_preds_to_save: int = 0,
                     save_only_wrong_preds: bool = True) -> Tuple[np.ndarray, str]:
     """Compute the recalls given the queries and database descriptors. The dataset is needed to know the ground truth
@@ -219,7 +220,7 @@ def compute_recalls(eval_ds: Dataset, queries_descriptors: np.ndarray, database_
     logging.debug("Calculating recalls")
     _, predictions = faiss_index.search(queries_descriptors, max(RECALL_VALUES))
 
-    #### For each query, check if the predictions are correct
+    # For each query, check if the predictions are correct
     positives_per_query = eval_ds.get_positives()
     recalls = np.zeros(len(RECALL_VALUES))
     for query_index, preds in enumerate(predictions):
