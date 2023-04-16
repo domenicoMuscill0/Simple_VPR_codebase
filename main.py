@@ -143,10 +143,9 @@ if __name__ == '__main__':
                                                 img_per_place=args.img_per_place)
         batch_sampler.set_labels(train_dataset.places_ids, shuffle=True)
         kwargs.update({"proxy_bank": proxy_bank, "proxy_head": proxy_head})
+        train_loader = DataLoader(dataset=train_dataset, num_workers=args.num_workers, batch_sampler=batch_sampler)
     else:
         batch_sampler = None
-
-    train_loader.batch_sampler = batch_sampler
 
     kwargs.update({"val_dataset": val_dataset, "test_dataset": test_dataset})
     if args.load_checkpoint:
