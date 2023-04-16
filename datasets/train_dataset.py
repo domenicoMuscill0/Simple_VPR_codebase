@@ -28,7 +28,7 @@ class TrainDataset(Dataset):
             raise FileNotFoundError(f"There are no images under {dataset_folder} , you should change this path")
         self.dict_place_paths = defaultdict(list)
         for image_path in self.images_paths:
-            place_id = image_path.split("$")[-2]
+            place_id = image_path.split("@")[-2]
             self.dict_place_paths[place_id].append(image_path)
 
         assert img_per_place <= min_img_per_place, \
