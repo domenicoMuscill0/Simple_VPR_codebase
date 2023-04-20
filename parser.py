@@ -21,12 +21,14 @@ def parse_arguments():
     # Architecture parameters
     parser.add_argument("--descriptors_dim", type=int, default=512,
                         help="dimensionality of the output descriptors")
-    # parser.add_argument("--enable_gpm", default=False, action=argparse.BooleanOptionalAction,
+    parser.add_argument("--feature_mixing", default=False, action=argparse.BooleanOptionalAction,
+                        help="whether to adopt Feature Mixing module")
+    # parser.add_argument("--gpm", default=False, action=argparse.BooleanOptionalAction,
     #                     help="whether to adopt Global Proxy Mining module")
-    # Kaggle merda. Se usi Colab usa l'altra versione
-    parser.add_argument('--enable_gpm', action='store_true')
-    parser.add_argument('--no-enable_gpm', dest='enable_gpm', action='store_false')
-    parser.set_defaults(enable_gpm=True)
+    # Solo per Kaggle. Se usi Colab usa l'altra versione
+    parser.add_argument('--gpm', action='store_true')
+    parser.add_argument('--no-gpm', dest='gpm', action='store_false')
+    parser.set_defaults(gpm=True)
     
     # Visualizations parameters
     parser.add_argument("--num_preds_to_save", type=int, default=0,

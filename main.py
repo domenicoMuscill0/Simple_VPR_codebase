@@ -30,9 +30,11 @@ class GeoModel(pl.LightningModule):
         self.model.fc = torch.nn.Linear(self.model.fc.in_features, descriptors_dim)
         self.model.avgpool = utils.GeM()
         # Instantiate the Proxy Head and Proxy Bank
-        if args.enable_gpm:
+        if args.gpm:
             self.phead = proxy_head
             self.pbank = proxy_bank
+        if args.feature_mixing:
+            self.mix = utils.MixVPR()
         # Set the loss function
         self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
         self.save_hyperparameters()
@@ -41,6 +43,10 @@ class GeoModel(pl.LightningModule):
         # Ask if in the GPM paper use the descriptors or the compressed representation.
         # Ask also if we store in the proxy bank the places proxies of only one batch or all the batches
         descriptors = self.model(images)
+        # What if we apply layer2, mixvpr without reducing dimensionality, layer3, mixvpr,
+        # sum previous mixvpr, layer4 and again mixvpr and we sum also previous mixvpr?
+        # Could it be beneficial to extract holistic features at multiple stages? Computationally it is affordable since
+        # we have very limited batches for each epoch if we use gpm
         return descriptors
 
     def configure_optimizers(self):
@@ -60,9 +66,10 @@ class GeoModel(pl.LightningModule):
         # labels = labels.view(num_places * num_images_per_place)
 
         # Feed forward the batch to the model
-        if args.enable_gpm:
+        if args.gpm:
             # We use place labels instead of compressed descriptors in order to enhance the connection
             # between compressed representation and gpm focus on retrieving highly informative mini-batches
+            self.pbank.set_n_batches(self.trainer.num_training_batches)
             descriptors = self(images)
             compressed_descriptors = self.phead(descriptors)
             labels = torch.flatten(torch.stack(labels))
@@ -136,9 +143,9 @@ if __name__ == '__main__':
               "save_only_wrong_preds": args.save_only_wrong_preds}
 
     train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args)
-    if args.enable_gpm:
+    if args.gpm:
         proxy_head = utils.ProxyHead(out_dim=128, in_dim=args.descriptors_dim)
-        proxy_bank = utils.ProxyBank(M=10, dim=128)
+        proxy_bank = utils.ProxyBank(img_per_place=10, dim=128)
         batch_sampler = utils.ProxyBatchSampler(bank=proxy_bank, batch_size=args.batch_size,
                                                 img_per_place=args.img_per_place)
         batch_sampler.set_labels(train_dataset.places_ids, shuffle=True)
@@ -189,7 +196,7 @@ if __name__ == '__main__':
             reload_dataloaders_every_n_epochs=1,  # we reload the dataset to shuffle the order
             log_every_n_steps=20,
             logger=neptune_logger,
-            limit_train_batches=len(train_dataset) if args.enable_gpm else None
+            limit_train_batches=len(train_dataset) if args.gpm else None
         )
     else:
         trainer = pl.Trainer(
@@ -204,7 +211,7 @@ if __name__ == '__main__':
             # we only run the checkpointing callback (you can add more)
             reload_dataloaders_every_n_epochs=1,  # we reload the dataset to shuffle the order
             log_every_n_steps=20,
-            limit_train_batches=len(train_dataset) if args.enable_gpm else None
+            limit_train_batches=len(train_dataset) if args.gpm else None
         )
 
     # trainer.validate(model=model, dataloaders=val_loader)

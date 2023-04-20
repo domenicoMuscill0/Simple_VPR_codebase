@@ -1,20 +1,83 @@
 from collections import defaultdict
 import faiss
 import logging
-import numpy as np
 from typing import Tuple
 import pytorch_lightning as pl
-import torch
 from pytorch_metric_learning import losses
-from torch import nn
-import torch.nn.functional as F
 from matplotlib import pyplot as plt
 from torch.utils.data import BatchSampler
 import visualizations
 from datasets.test_dataset import TestDataset
+import torch
+import torch.nn.functional as F
+import torch.nn as nn
+import numpy as np
 
 # Compute R@1, R@5, R@10, R@20
 RECALL_VALUES = [1, 5, 10, 20]
+
+
+class FeatureMixerLayer(nn.Module):
+    def __init__(self, in_dim, mlp_ratio=1):
+        super().__init__()
+        self.mix = nn.Sequential(
+            nn.LayerNorm(in_dim),
+            nn.Linear(in_dim, int(in_dim * mlp_ratio)),
+            nn.ReLU(),
+            nn.Linear(int(in_dim * mlp_ratio), in_dim),
+        )
+
+        # Ask for this snippet of code
+        for m in self.modules():
+            if isinstance(m, (nn.Linear)):
+                nn.init.trunc_normal_(m.weight, std=0.02)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+
+    def forward(self, x):
+        return x + self.mix(x)
+
+
+class MixVPR(nn.Module):
+    def __init__(self,
+                 in_channels=1024,
+                 in_h=20,
+                 in_w=20,
+                 out_channels=512,
+                 mix_depth=1,
+                 mlp_ratio=1,
+                 out_rows=4,
+                 ) -> None:
+        super().__init__()
+
+        self.in_h = in_h  # height of input feature maps
+        self.in_w = in_w  # width of input feature maps
+        self.in_channels = in_channels  # depth of input feature maps
+
+        self.out_channels = out_channels  # depth wise projection dimension
+        self.out_rows = out_rows  # row wise projection dimension
+
+        self.mix_depth = mix_depth  # L the number of stacked FeatureMixers
+        self.mlp_ratio = mlp_ratio  # ratio of the mid-projection layer in the mixer block
+
+        hw = in_h * in_w
+        self.mix = nn.Sequential(*[
+            FeatureMixerLayer(in_dim=hw, mlp_ratio=mlp_ratio)
+            for _ in range(self.mix_depth)
+        ])
+        self.channel_proj = nn.Linear(in_channels, out_channels)
+        self.row_proj = nn.Linear(hw, out_rows)
+
+    def forward(self, x):
+        x = x.flatten(2)
+        x = self.mix(x)
+        # What if we mix the feature maps by using skip connections?
+        x = x.permute(0, 2, 1)
+        x = self.channel_proj(x)
+        x = x.permute(0, 2, 1)
+        x = self.row_proj(x)
+        x = F.normalize(x.flatten(1), p=2, dim=-1)
+        return x
 
 
 class ProxyHead(nn.Module):
@@ -52,13 +115,17 @@ class ProxyBank:
     """This class stores the places' proxies together with their identifier
        and performs exhaustive search on the index to retrieve the mini-batch sampling pool."""
 
-    def __init__(self, M, bank=None, dim: int = 128, random_state: int = None):
+    def __init__(self, img_per_place, bank=None, dim: int = 128, random_state: int = None):
         if bank is None:
             bank = defaultdict(ProxyBank.Proxy)
         self.__bank = bank
         np.random.seed(random_state)
         self.__index = ProxyBank.Index(faiss.IndexIDMap(faiss.IndexFlatIP(dim)))
-        self.M = M
+        self.img_per_place = img_per_place
+        self.n_batches = 23
+
+    def set_n_batches(self, n_batches):
+        self.n_batches = n_batches
 
     def update_bank(self, descriptors, labels):
         """This method adds descriptors and labels retrieved at each batch training step end to the underlying bank
@@ -78,7 +145,12 @@ class ProxyBank:
            L: is a list of np.array/torch.Tensor [l_1,...,l_M]
            M: number of places per mini-batch
            l_i: identifier of place P_i that is most similar to the extracted place proxy descriptor c_j"""
-        c_k = np.random.permutation(self.__bank.values())
+        n = len(self.__bank)
+        if n == 0:
+          n_places = 23  # counted from gsv_xs
+          return np.random.randint(low=0, high=n_places, size=(self.n_batches, self.img_per_place)), None
+        # print("Valori:", n, list(map(lambda v: v.get(), self.__bank.values())))
+        c_k = np.random.choice(list(map(lambda v: v.get().cpu().detach(), self.__bank.values())), self.n_batches).tolist()
         # print("Le labels nella banca sono:",list(map(lambda k: k, self.__bank.keys())))
         return self.__index[c_k] if not return_descriptors else self.__index[c_k], c_k
 
@@ -119,15 +191,11 @@ class ProxyBank:
         def __getitem__(self, items):
             # We implement without deleting already selected places
             # Returns the ids and not the descriptors
-            n = len(items)
-            if n == 0:
-                n_places = 23  # counted from gsv_xs
-                return np.random.randint(low=0, high=n_places, size=(n_places // 2, self.top_places))
-            items = torch.stack(list(map(lambda it: it.get().cpu().detach(), items)))
+            items = torch.stack(items)
             _, predictions = self._index.search(items, self.top_places)  # returns top top_places for each query
             # print("AOOOOOOOOOOOOOOOOOO1", len(items), predictions)
             if not self.__custom_sim:
-                return predictions[0] if n == 1 else predictions
+                return predictions
 
         def reset(self):
             self._index.reset()
@@ -137,7 +205,7 @@ class ProxyBank:
 
 
 class ProxyBatchSampler(BatchSampler):
-    def __init__(self, sampler=None, data_labels=torch.arange(20), bank=ProxyBank(M=8),
+    def __init__(self, sampler=None, data_labels=torch.arange(20), bank=ProxyBank(img_per_place=8),
                  batch_size: int = 64, img_per_place: int = 8, drop_last=True):
         super().__init__(sampler, batch_size, drop_last)
         assert batch_size % img_per_place == 0
