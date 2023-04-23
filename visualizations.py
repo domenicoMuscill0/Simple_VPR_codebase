@@ -5,8 +5,8 @@ from tqdm import tqdm
 from skimage.transform import rescale
 from PIL import Image, ImageDraw, ImageFont
 
-from Simple_VPR_codebase import parser
-from Simple_VPR_codebase.main import GeoModel, get_datasets_and_dataloaders
+#from Simple_VPR_codebase import parser
+#from Simple_VPR_codebase.main import GeoModel, get_datasets_and_dataloaders
 
 # Height and width of a single image
 H = 512

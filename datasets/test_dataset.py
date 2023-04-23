@@ -51,6 +51,7 @@ class TestDataset(data.Dataset):
         if len(self.queries_paths) == 0:
             raise FileNotFoundError(f"There are no images under {self.queries_paths} , you should change this path")
         # The format must be path/to/file/@utm_easting@utm_northing@...@.jpg
+
         self.database_utms = np.array \
             ([(path.split("@")[1], path.split("@")[2]) for path in self.database_paths]).astype(float)
         self.queries_utms = np.array([(path.split("@")[1], path.split("@")[2]) for path in self.queries_paths]).astype \
