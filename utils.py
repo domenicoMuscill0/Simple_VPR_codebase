@@ -91,7 +91,7 @@ class ProxyHead(nn.Module):
                      [nn.BatchNorm1d(out_dim)]
         self.model = nn.Sequential(*self.model)
         self.loss_fn = losses.ArcFaceLoss(n_classes, out_dim)
-        self.optimizer = torch.optim.Adam(self.loss_fn.parameters(), lr=0.001, weight_decay=0.001)
+        self.optimizer = torch.optim.Adam(self.loss_fn.parameters(), lr=0.0001, weight_decay=0.001)
 
     def forward(self, images):
         descriptors = self.model(images)
@@ -103,25 +103,24 @@ class ProxyHead(nn.Module):
         return loss
 
     def fit(self, descriptors, labels, epochs: int = 20):
-        for i in range(epochs):
-            compressed_descriptors = self(descriptors)
-            loss = self.loss_fn(compressed_descriptors, labels)
-            self.optimizer.zero_grad()
-            loss.backward(retain_graph=True)
-            self.optimizer.step()
+        compressed_descriptors = self(descriptors)
+        loss = self.loss_fn(compressed_descriptors, labels)
+        self.optimizer.zero_grad()
+        loss.backward(retain_graph=True)
+        self.optimizer.step()
 
 
 class ProxyBank:
     """This class stores the places' proxies together with their identifier
        and performs exhaustive search on the index to retrieve the mini-batch sampling pool."""
 
-    def __init__(self, img_per_place, bank=None, dim: int = 128, random_state: int = None):
+    def __init__(self, top_places: int = 10, bank=None, dim: int = 128, random_state: int = None):
         if bank is None:
             bank = defaultdict(ProxyBank.Proxy)
         self.__bank = bank
         np.random.seed(random_state)
-        self.__index = ProxyBank.Index(faiss.IndexIDMap(faiss.IndexFlatIP(dim)))
-        self.img_per_place = img_per_place
+        self.top_places = top_places
+        self.__index = ProxyBank.Index(faiss.IndexIDMap(faiss.IndexFlatIP(dim)), top_places=top_places)
         self.n_batches = 23
 
     def set_n_batches(self, n_batches):
@@ -146,13 +145,19 @@ class ProxyBank:
            M: number of places per mini-batch
            l_i: identifier of place P_i that is most similar to the extracted place proxy descriptor c_j"""
         n = len(self.__bank)
+        n_places = 23  # counted from gsv_xs
         if n == 0:
-          n_places = 23  # counted from gsv_xs
-          return np.random.randint(low=0, high=n_places, size=(self.n_batches, self.img_per_place)), None
-        # print("Valori:", n, list(map(lambda v: v.get(), self.__bank.values())))
-        c_k = np.random.choice(list(map(lambda v: v.get().cpu().detach(), self.__bank.values())), self.n_batches).tolist()
+          print("Epoch 0 batches", self.n_batches)
+          return np.random.randint(low=0, high=n_places, size=(self.n_batches, self.top_places)), None
+        sample = list(map(lambda v: v.get().cpu().detach().numpy(), self.__bank.values()))
+        sample = np.random.permutation(sample)
+        # print("Valori:", n, sample)
+        c_k = sample
         # print("Le labels nella banca sono:",list(map(lambda k: k, self.__bank.keys())))
-        return self.__index[c_k] if not return_descriptors else self.__index[c_k], c_k
+        sample = np.vstack([self.__index[c_k], np.random.randint(low=0, high=n_places, size=(self.n_batches-n_places, self.top_places))])
+        # print("Ora Sample e':", sample)
+        self.__index.reset()
+        return sample if not return_descriptors else sample, c_k
 
     def __len__(self):
         return len(self.__bank.values())
@@ -177,7 +182,7 @@ class ProxyBank:
             return ProxyBank.Proxy(tensor=self.__arch + other.__arch, n=self.__n + other.__n)
 
     class Index:
-        def __init__(self, index: faiss.Index, top_places: int = 8,  # top_places must be batch_size / img_per_place
+        def __init__(self, index: faiss.Index, top_places: int = 8,  # top_places must be batch_size / top_places
                      similarity="faiss-kNN", **kwargs):
             self._index = index  # Check if it is better L2 or Inner Product
             self.top_places = top_places
@@ -191,9 +196,10 @@ class ProxyBank:
         def __getitem__(self, items):
             # We implement without deleting already selected places
             # Returns the ids and not the descriptors
-            items = torch.stack(items)
+            items = np.vstack(items)
             _, predictions = self._index.search(items, self.top_places)  # returns top top_places for each query
-            # print("AOOOOOOOOOOOOOOOOOO1", len(items), predictions)
+            # print("AOOOOOOOOOOOOOOOOOO1", len(items), items, predictions)
+            # print("Distanze:", _)
             if not self.__custom_sim:
                 return predictions
 
@@ -205,7 +211,7 @@ class ProxyBank:
 
 
 class ProxyBatchSampler(BatchSampler):
-    def __init__(self, sampler=None, data_labels=torch.arange(20), bank=ProxyBank(img_per_place=8),
+    def __init__(self, sampler=None, data_labels=torch.arange(20), bank=ProxyBank(top_places=8),
                  batch_size: int = 64, img_per_place: int = 8, drop_last=True):
         super().__init__(sampler, batch_size, drop_last)
         assert batch_size % img_per_place == 0
@@ -225,14 +231,14 @@ class ProxyBatchSampler(BatchSampler):
         # images for each place
         choices, _ = self.bank.sample_places(return_descriptors=False)
         # print("AOOOOOOOOOOOOOOOOOO2", choices)
-        for topM_places_ids in np.random.permutation(choices):
+        for topM_places_ids in choices:
             # batch = [np.random.permutation(np.where(self.data_labels == id))[:self.num_choices] for id in
             #          topM_places_ids]
-            # print("AOOOOOOOOOOOOOOO3", topM_places_ids)
+            print("AOOOOOOOOOOOOOOO3", topM_places_ids, "\nChoices shape:", choices.shape)
             yield topM_places_ids
 
     def __len__(self):
-        return self.batch_size
+        return 23
 
 
 class GeM(nn.Module):

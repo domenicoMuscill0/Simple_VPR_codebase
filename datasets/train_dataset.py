@@ -51,7 +51,7 @@ class TrainDataset(Dataset):
         # print("yess", place_id)
         all_paths_from_place_id = self.dict_place_paths[place_id]
         # print("yesss", len(all_paths_from_place_id))
-        chosen_paths = np.random.choice(all_paths_from_place_id, self.img_per_place)
+        chosen_paths = np.random.permutation(all_paths_from_place_id)[:self.img_per_place]
         images += [self.transform(Image.open(path).convert('RGB')) for path in chosen_paths]
         labels = [index] * self.img_per_place
         return torch.stack(images), labels

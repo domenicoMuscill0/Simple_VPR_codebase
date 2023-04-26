@@ -18,7 +18,9 @@ torch.set_float32_matmul_precision("highest")
 
 class GeoModel(pl.LightningModule):
     def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True,
-                 proxy_bank: utils.ProxyBank = None, proxy_head: utils.ProxyHead = None):
+                 proxy_bank: utils.ProxyBank = None, proxy_head: utils.ProxyHead = None,
+                 in_C: int = 3, in_H: int = 224, in_W: int = 224,
+                 out_C: int = 2, out_R: int = 64, mix_depth: int = 5):
         super().__init__()
         self.val_dataset = val_dataset
         self.test_dataset = test_dataset
@@ -34,7 +36,12 @@ class GeoModel(pl.LightningModule):
             self.phead = proxy_head
             self.pbank = proxy_bank
         if args.feature_mixing:
-            self.mix = utils.MixVPR()
+            self.mix = utils.MixVPR(in_channels=in_C, in_h=in_H, in_w=in_W,
+                                    out_channels=out_C, out_rows=out_R, mix_depth=mix_depth)
+            self.model.layer3 = None
+            self.model.layer4 = None
+            self.model.avgpool = None
+            self.model.fc = None
         # Set the loss function
         self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
         self.save_hyperparameters()
@@ -43,6 +50,8 @@ class GeoModel(pl.LightningModule):
         # Ask if in the GPM paper use the descriptors or the compressed representation.
         # Ask also if we store in the proxy bank the places proxies of only one batch or all the batches
         descriptors = self.model(images)
+        if args.feature_mixing:
+            descriptors = self.mix(descriptors)
         # What if we apply layer2, mixvpr without reducing dimensionality, layer3, mixvpr,
         # sum previous mixvpr, layer4 and again mixvpr and we sum also previous mixvpr?
         # Could it be beneficial to extract holistic features at multiple stages? Computationally it is affordable since
@@ -62,6 +71,7 @@ class GeoModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         images, labels = batch
         num_places, num_images_per_place, C, H, W = images.shape
+        # print("C:", C, "\tH:", H, "\tW:", W)
         images = images.view(num_places * num_images_per_place, C, H, W)
         # labels = labels.view(num_places * num_images_per_place)
 
@@ -145,7 +155,7 @@ if __name__ == '__main__':
     train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args)
     if args.gpm:
         proxy_head = utils.ProxyHead(out_dim=128, in_dim=args.descriptors_dim)
-        proxy_bank = utils.ProxyBank(img_per_place=10, dim=128)
+        proxy_bank = utils.ProxyBank(top_places=8, dim=128)
         batch_sampler = utils.ProxyBatchSampler(bank=proxy_bank, batch_size=args.batch_size,
                                                 img_per_place=args.img_per_place)
         batch_sampler.set_labels(train_dataset.places_ids, shuffle=True)
@@ -192,11 +202,11 @@ if __name__ == '__main__':
             precision=16,  # we use half precision to reduce  memory usage
             max_epochs=args.max_epochs,
             check_val_every_n_epoch=1,  # run validation every epoch
-            callbacks=[checkpoint_cb, descriptor_printer_cb],
+            # callbacks=[checkpoint_cb, descriptor_printer_cb],
             reload_dataloaders_every_n_epochs=1,  # we reload the dataset to shuffle the order
             log_every_n_steps=20,
             logger=neptune_logger,
-            limit_train_batches=len(train_dataset) if args.gpm else None
+            # limit_train_batches=len(train_dataset) if args.gpm else None
         )
     else:
         trainer = pl.Trainer(
@@ -207,11 +217,11 @@ if __name__ == '__main__':
             precision=16,  # we use half precision to reduce  memory usage
             max_epochs=args.max_epochs,
             check_val_every_n_epoch=1,  # run validation every epoch
-            callbacks=[checkpoint_cb, descriptor_printer_cb],
+            # callbacks=[checkpoint_cb, descriptor_printer_cb],
             # we only run the checkpointing callback (you can add more)
             reload_dataloaders_every_n_epochs=1,  # we reload the dataset to shuffle the order
             log_every_n_steps=20,
-            limit_train_batches=len(train_dataset) if args.gpm else None
+            # limit_train_batches=len(train_dataset) if args.gpm else None
         )
 
     # trainer.validate(model=model, dataloaders=val_loader)
