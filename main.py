@@ -19,8 +19,7 @@ torch.set_float32_matmul_precision("highest")
 class GeoModel(pl.LightningModule):
     def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True,
                  proxy_bank: utils.ProxyBank = None, proxy_head: utils.ProxyHead = None,
-                 in_C: int = 3, in_H: int = 224, in_W: int = 224,
-                 out_C: int = 2, out_R: int = 64, mix_depth: int = 5):
+                 mix: utils.MixVPR = None):
         super().__init__()
         self.val_dataset = val_dataset
         self.test_dataset = test_dataset
@@ -36,8 +35,8 @@ class GeoModel(pl.LightningModule):
             self.phead = proxy_head
             self.pbank = proxy_bank
         if args.feature_mixing:
-            self.mix = utils.MixVPR(in_channels=in_C, in_h=in_H, in_w=in_W,
-                                    out_channels=out_C, out_rows=out_R, mix_depth=mix_depth)
+            # It dodes not pass over the constructor
+            self.mix = mix
             self.model.layer3 = None
             self.model.layer4 = None
             self.model.avgpool = None
@@ -67,28 +66,38 @@ class GeoModel(pl.LightningModule):
         loss = self.loss_fn(descriptors, labels)
         return loss
 
+    # def setup(self, stage: str) -> None:  GIVES inf TRAINING BATCHES
+    #     if args.gpm:
+    #         self.pbank.set_n_batches(self.trainer.num_training_batches)
+
     # This is the training step that's executed at each iteration
     def training_step(self, batch, batch_idx):
         images, labels = batch
         num_places, num_images_per_place, C, H, W = images.shape
         # print("C:", C, "\tH:", H, "\tW:", W)
         images = images.view(num_places * num_images_per_place, C, H, W)
-        # labels = labels.view(num_places * num_images_per_place)
-
+        descriptors = self(images)
+        loss = self.loss_function(descriptors, labels)  # Call the loss_function we defined above
         # Feed forward the batch to the model
+
         if args.gpm:
             # We use place labels instead of compressed descriptors in order to enhance the connection
             # between compressed representation and gpm focus on retrieving highly informative mini-batches
+            descriptors = descriptors.detach()
             self.pbank.set_n_batches(self.trainer.num_training_batches)
-            descriptors = self(images)
             compressed_descriptors = self.phead(descriptors)
-            labels = torch.flatten(torch.stack(labels))
             # print("Labels:", labels)
-            self.phead.fit(descriptors, labels)
+            labels = torch.flatten(torch.stack(labels))
+            # self.phead.fit(descriptors, labels)
+            # print(compressed_descriptors.shape, labels.shape)
+            loss = self.phead.loss_fn(compressed_descriptors, labels)
+            self.phead.optimizer.zero_grad()
+            loss.backward(retain_graph=True)
+            self.phead.optimizer.step()
+            compressed_descriptors = compressed_descriptors.cpu().detach()
             self.pbank.update_bank(compressed_descriptors, labels)
         else:
-            descriptors = self(images)  # Here we are calling the method forward that we defined above
-        loss = self.loss_function(descriptors, torch.Tensor(labels))  # Call the loss_function we defined above
+            labels = labels.view(num_places * num_images_per_place)
 
         self.log('loss', loss.item(), logger=True)
         return {'loss': loss}
@@ -141,7 +150,7 @@ def get_datasets_and_dataloaders(args):
     )
     val_dataset = TestDataset(dataset_folder=args.val_path)
     test_dataset = TestDataset(dataset_folder=args.test_path)
-    train_loader = DataLoader(dataset=train_dataset, num_workers=args.num_workers)
+    train_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, num_workers=args.num_workers)
     val_loader = DataLoader(dataset=val_dataset, batch_size=args.batch_size, num_workers=4, shuffle=False)
     test_loader = DataLoader(dataset=test_dataset, batch_size=args.batch_size, num_workers=4, shuffle=False)
     return train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader
@@ -155,14 +164,17 @@ if __name__ == '__main__':
     train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args)
     if args.gpm:
         proxy_head = utils.ProxyHead(out_dim=128, in_dim=args.descriptors_dim)
-        proxy_bank = utils.ProxyBank(top_places=8, dim=128)
+        proxy_bank = utils.ProxyBank(top_places=4, dim=128)
         batch_sampler = utils.ProxyBatchSampler(bank=proxy_bank, batch_size=args.batch_size,
                                                 img_per_place=args.img_per_place)
         batch_sampler.set_labels(train_dataset.places_ids, shuffle=True)
         kwargs.update({"proxy_bank": proxy_bank, "proxy_head": proxy_head})
         train_loader = DataLoader(dataset=train_dataset, num_workers=args.num_workers, batch_sampler=batch_sampler)
-    else:
-        batch_sampler = None
+
+    if args.feature_mixing:
+        mix = utils.MixVPR(in_channels=3, in_h=224, in_w=224,
+                           out_channels=2, out_rows=64, mix_depth=4)
+        kwargs.update({"mix": mix})
 
     kwargs.update({"val_dataset": val_dataset, "test_dataset": test_dataset})
     if args.load_checkpoint:
@@ -179,7 +191,6 @@ if __name__ == '__main__':
         mode='max'
     )
 
-    descriptor_printer_cb = utils.PrintDescriptor(im_path=args.log_path)
     if args.neptune_api_key:
         neptune_logger = NeptuneLogger(
             api_key=args.neptune_api_key,  # replace with your own
