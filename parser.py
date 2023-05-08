@@ -17,6 +17,10 @@ def parse_arguments():
                         help="number of processes to use for data loading / preprocessing")
     parser.add_argument("--load_checkpoint", type=str, default="no",
                          help="whether to load pytorch lightning checkpoints")
+    parser.add_argument("--learning_rate", type=float, default=0.001,
+                        help="learnign rate of the minimizer method")
+    parser.add_argument("--optimizer", type=str, default="SGD",
+                        help="optimizer you want to use")
 
     # Architecture parameters
     parser.add_argument("--descriptors_dim", type=int, default=512,

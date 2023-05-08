@@ -62,7 +62,12 @@ class GeoModel(pl.LightningModule):
         return descriptors
 
     def configure_optimizers(self):
-        optimizers = torch.optim.SGD(self.parameters(), lr=0.001, weight_decay=0.001, momentum=0.9)
+        if args.optimizer == "SGD":
+            optimizers = torch.optim.SGD(self.parameters(), lr=args.learning_rate, weight_decay=0.001, momentum=0.9)
+        if args.optimizer == "AdamW":
+            optimizers = torch.optim.AdamW(self.parameters(), lr=args.learning_rate, weight_decay=0.001)
+        if args.optimizer == "ASGD":
+            optimizers = torch.optim.ASGD(self.parameters(), lr=args.learning_rate, weight_decay=0.001)
         return optimizers
 
     #  The loss function call (this method will be called at each training iteration)
@@ -164,7 +169,8 @@ if __name__ == '__main__':
         )
         PARAMS = {
             "batch_size": args.batch_size,
-            "lr": 0.001,
+            "lr": args.learning_rate,
+            "optimizer": args.optimizer,
             "max_epochs": args.max_epochs,
         }
 
