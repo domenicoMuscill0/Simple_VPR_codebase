@@ -6,12 +6,14 @@ import pytorch_lightning as pl
 from pytorch_metric_learning import losses
 from matplotlib import pyplot as plt
 from torch.utils.data import BatchSampler, Sampler
+from torchvision.transforms.transforms import math
 import visualizations
 from datasets.test_dataset import TestDataset
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
 import numpy as np
+from sklearn.decomposition import PCA
 
 # Compute R@1, R@5, R@10, R@20
 RECALL_VALUES = [1, 5, 10, 20]
@@ -20,12 +22,12 @@ RECALL_VALUES = [1, 5, 10, 20]
 class FeatureMixerLayer(nn.Module):
     def __init__(self, in_dim, mlp_ratio=1):
         super().__init__()
-        self.mix = nn.Sequential(
-            nn.LayerNorm(in_dim),
-            nn.Linear(in_dim, int(in_dim * mlp_ratio)),
-            nn.ReLU(),
-            nn.Linear(int(in_dim * mlp_ratio), in_dim),
-        )
+        self.mix = []
+        self.mix.append(nn.LayerNorm(in_dim))
+        self.mix.append(nn.Linear(in_dim, int(in_dim * mlp_ratio)))
+        self.mix.append(nn.ReLU())
+        self.mix.append(nn.Linear(int(in_dim * mlp_ratio), in_dim))
+        self.mix = nn.Sequential(*self.mix)
 
         # Ask for this snippet of code
         for m in self.modules():
@@ -61,15 +63,18 @@ class MixVPR(nn.Module):
         self.mlp_ratio = mlp_ratio  # ratio of the mid-projection layer in the mixer block
 
         hw = in_h * in_w
-        self.mix = nn.Sequential(*[
-            FeatureMixerLayer(in_dim=hw, mlp_ratio=mlp_ratio)
-            for _ in range(self.mix_depth)
-        ])
+        self.mix = []
+        for _ in range(self.mix_depth):
+          self.mix.append(FeatureMixerLayer(in_dim=hw, mlp_ratio=mlp_ratio))
+          hw = hw*mlp_ratio
+        self.mix = nn.Sequential(*self.mix)
         self.channel_proj = nn.Linear(in_channels, out_channels)
         self.row_proj = nn.Linear(hw, out_rows)
 
     def forward(self, x):
         x = x.flatten(2)
+        # _, _, V = torch.pca_lowrank(x)
+        # x = matmul(x, V[:, :self.out_channels])
         x = self.mix(x)
         # What if we mix the feature maps by using skip connections?
         x = x.permute(0, 2, 1)
@@ -81,20 +86,21 @@ class MixVPR(nn.Module):
 
 
 class ProxyHead(nn.Module):
-    def __init__(self, out_dim: int = 128, in_dim: int = 512,
+    def __init__(self, out_dim: int = 32, in_dim: int = 128,
                  n_classes: int = 23, n_layers: int = 3):
         super().__init__()
         a, b = in_dim, -np.log(out_dim / in_dim) / n_layers
         dims = np.ceil(a * np.exp(-b * np.arange(n_layers + 1))).astype(np.int16)
-        self.model = [nn.Flatten()] + \
+        self.reduction = [nn.Flatten()] + \
                      [nn.Sequential(nn.Linear(dims[i], dims[i + 1]), nn.ReLU()) for i in range(n_layers)] + \
                      [nn.BatchNorm1d(out_dim)]
-        self.model = nn.Sequential(*self.model)
-        self.loss_fn = losses.ArcFaceLoss(n_classes, out_dim)
-        self.optimizer = torch.optim.Adam(self.loss_fn.parameters(), lr=0.0001, weight_decay=0.001)
+        self.reduction = nn.Sequential(*self.reduction)
+        self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=0.0001, weight_decay=0.001)
+
 
     def forward(self, images):
-        descriptors = self.model(images)
+        descriptors = self.reduction(images)
         return descriptors
 
     def fit(self, descriptors, labels):
@@ -109,72 +115,54 @@ class ProxyBank:
     """This class stores the places' proxies together with their identifier
        and performs exhaustive search on the index to retrieve the mini-batch sampling pool."""
 
-    def __init__(self, top_places: int = 4, bank=None, dim: int = 128, random_state: int = None):
+    def __init__(self, k: int = 10, bank=None):
         if bank is None:
             bank = defaultdict(ProxyBank.Proxy)
         self.__bank = bank
-        np.random.seed(random_state)
-        self.top_places = top_places
-        self.__index = faiss.IndexIDMap(faiss.IndexFlatIP(dim))
-        self.n_batches = 23
-        self.nb_samples = 6
-
-    def set_n_batches(self, n_batches):
-        self.n_batches = n_batches
+        self.k = k
+        self.dim = 128
+        self.nb_samples = self.dim
+        self.index = faiss.index_factory(self.dim, 'IDMap,Flat')
 
     def update_bank(self, embs, labels):
         """This method adds descriptors and labels retrieved at each batch training step end to the underlying bank
            and the proxy index is updated."""
 
-        n_embs, dim = embs.shape[0], embs.shape[1]
         for d, l in zip(embs, labels):
             self.__bank[l.item()] = self.__bank[l.item()] + ProxyBank.Proxy(d)
-        idx = np.arange(n_embs)
-        self.__index.add_with_ids(embs, idx)
+        idx = np.arange(self.nb_samples)
+        embs_by_idx = torch.stack([self.__bank[i].get() for i in idx])
+        self.index.add_with_ids(embs_by_idx, idx)
 
-    def sample_places(self):
-        """This function returns the pair (L, c_j) sampled from the underlying index, where:
-           c_j: is the identifier of the sampled place for the next mini-batch
-           L: is a list of np.array/torch.Tensor [l_1,...,l_M]
-           M: number of places per mini-batch
-           l_i: identifier of place P_i that is most similar to the extracted place proxy descriptor c_j"""
-        n = len(self.__bank)
-        n_places = 23  # counted from gsv_xs
-        if n == 0:
-            print("Epoch 0 batches", self.n_batches)
-            batches = np.hstack([np.arange(n_places),
-                                 np.arange(self.nb_samples - n_places % self.nb_samples)])
-            batches = np.random.permutation(batches)
-            return batches.reshape(self.nb_samples, -1)
+    def build_index(self):
+        """
+        embs is the bank, labels are the place IDs, k is the number of places per group (M in the article)
+        """
+
+        embs = self.__bank.values()
+        embs = list(map(lambda emb: emb.get(), embs))
+        embs = np.vstack(embs)
+
+        labels = np.array(list(self.__bank.keys()))
+
         s = {}
-        for e in range(n_places):
+        for e in range(self.nb_samples):
             s[e] = 1
 
         ids = []
-        list_idx = np.arange(n_places)
+        list_idx = np.arange(self.nb_samples)
         np.random.shuffle(list_idx)
         for i in list_idx:
             if s[i] == 1:  # if id 'i' has not already been selected in one of the groups
-                choice = self.__bank[i].get().view(1, -1)
-                choice = choice.cpu().detach()
-                _, line = self.__index.search(choice, self.top_places)  # check shape of choice
+                _, line = self.index.search(embs[i:i + 1], self.k)
                 line = line[0]
-                line = line[line != -1]  # If there are no available proxies left
                 ids.extend(line)
-                self.__index.remove_ids(line)
+                self.index.remove_ids(line)
                 for e in line:
                     s[e] = 0  # keep track of the already selected ids
-        print("First ids:", ids)
-        # ids = ids[:self.nb_samples]
-        labels = np.array(list(self.__bank.keys()))
-        labels = np.hstack([labels[ids], np.random.choice(labels,
-                                                          self.nb_samples * self.top_places - len(ids))])
-        labels = labels.reshape(self.nb_samples, self.top_places)
-        print("labels:", labels, "ids:", ids, "s:", s)
-        return labels
 
-    def __len__(self):
-        return len(self.__bank.values())
+        ids = ids[:embs.shape[0]]
+        return labels[ids]
 
     class Proxy:
         def __init__(self, tensor: torch.Tensor = None, n: int = 1, dim: int = 128):
@@ -182,7 +170,6 @@ class ProxyBank:
                 self.__arch = torch.zeros(dim)
             else:
                 self.__arch = tensor
-            self.__arch = self.__arch.cuda()
             self.__n = n
 
         @property
@@ -196,81 +183,20 @@ class ProxyBank:
             return ProxyBank.Proxy(tensor=self.__arch + other.__arch, n=self.__n + other.__n)
 
 
-def build_index(embs, labels, k=40):  # k is M in the algorithm
-    """
-    embs is the bank, labels are the place IDs, k is the number of places per group (M in the article)
-    """
-    nb_samples = embs.shape[0]
-    dim = embs.shape[1]
-    idx = np.arange(nb_samples)
-    index = faiss.index_factory(dim, 'IDMap,Flat')
-    index.add_with_ids(embs, idx)
-
-    s = {}
-    for e in range(nb_samples):
-        s[e] = 1
-
-    ids = []
-    list_idx = np.arange(embs.shape[0])
-    np.random.shuffle(list_idx)
-    for i in list_idx:
-        if s[i] == 1:  # if id 'i' has not already been selected in one of the groups
-            _, line = index.search(embs[i:i + 1], k)
-            line = line[0]
-            ids.extend(line)
-            index.remove_ids(line)
-            for e in line:
-                s[e] = 0  # keep track of the already selected ids
-
-    ids = ids[:embs.shape[0]]
-    return labels[ids]
-
-
 class HardSampler(Sampler):
 
-    def __init__(self, indexes_list, batch_size):
+    def __init__(self, indexes_list, batch_size: int = 10):
         self.batch_size = batch_size
         self.batches = [indexes_list[batch_size * i: batch_size * (i + 1)] for i in
-                        range(np.ceil(len(indexes_list) / batch_size))]
+                        range(math.ceil(len(indexes_list) / batch_size))]
 
     def __iter__(self):
         for batch in self.batches:
+            print("batch:", batch)
             yield batch
 
     def __len__(self):
         return len(self.batches)
-
-
-class ProxyBatchSampler(BatchSampler):
-    def __init__(self, sampler=None, data_labels=torch.arange(20), bank=ProxyBank(),
-                 batch_size: int = 64, img_per_place: int = 8, drop_last=True):
-        super().__init__(sampler, batch_size, drop_last)
-        assert batch_size % img_per_place == 0
-        self.data_labels = data_labels
-        self.bank = bank
-        self.batch_size = batch_size
-        self.img_per_place = img_per_place
-        self.drop_last = drop_last
-        self.nb_samples = bank.nb_samples
-
-    def set_labels(self, labels, shuffle=True):
-        if shuffle:
-            np.random.shuffle(labels)
-        self.data_labels = labels
-
-    def __iter__(self):
-        # choices contains an entire epoch in the form of sequences of place ids. The dataset will extract img_per_place
-        # images for each place
-        choices = self.bank.sample_places()
-        print("AOOOOOOOOOOOOOOOOOO2", choices)
-        for topM_places_ids in choices:
-            # batch = [np.random.permutation(np.where(self.data_labels == id))[:self.num_choices] for id in
-            #          topM_places_ids]
-            # print("AOOOOOOOOOOOOOOO3", topM_places_ids, "\nChoices shape:", choices)
-            yield topM_places_ids
-
-    def __len__(self):
-        return self.nb_samples
 
 
 class GeM(nn.Module):

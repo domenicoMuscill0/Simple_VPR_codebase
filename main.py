@@ -8,6 +8,7 @@ from torch.utils.data.dataloader import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import NeptuneLogger
 import utils
+import sklearn
 import parser
 from datasets.test_dataset import TestDataset
 from datasets.train_dataset import TrainDataset
@@ -37,6 +38,7 @@ class GeoModel(pl.LightningModule):
         if args.feature_mixing:
             # It dodes not pass over the constructor
             self.mix = mix
+            # [print("AOOOOOOOOOOOOOOOOO", k) for k, m in self.model.named_modules()]
             self.model.layer3 = None
             self.model.layer4 = None
             self.model.avgpool = None
@@ -48,9 +50,16 @@ class GeoModel(pl.LightningModule):
     def forward(self, images):
         # Ask if in the GPM paper use the descriptors or the compressed representation.
         # Ask also if we store in the proxy bank the places proxies of only one batch or all the batches
-        descriptors = self.model(images)
         if args.feature_mixing:
+            descriptors = self.model.conv1(images)
+            descriptors = self.model.bn1(descriptors)
+            descriptors = self.model.relu(descriptors)
+            descriptors = self.model.maxpool(descriptors)
+            descriptors = self.model.layer1(descriptors)
+            descriptors = self.model.layer2(descriptors)
             descriptors = self.mix(descriptors)
+        else:
+          descriptors = self.model(images)
         # What if we apply layer2, mixvpr without reducing dimensionality, layer3, mixvpr,
         # sum previous mixvpr, layer4 and again mixvpr and we sum also previous mixvpr?
         # Could it be beneficial to extract holistic features at multiple stages? Computationally it is affordable since
@@ -74,30 +83,30 @@ class GeoModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         images, labels = batch
         num_places, num_images_per_place, C, H, W = images.shape
-        # print("C:", C, "\tH:", H, "\tW:", W)
         images = images.view(num_places * num_images_per_place, C, H, W)
         descriptors = self(images)
+        labels = labels.view(num_places * num_images_per_place)
         loss = self.loss_function(descriptors, labels)  # Call the loss_function we defined above
-        # Feed forward the batch to the model
 
+        # Feed forward the batch to the model
         if args.gpm:
             # We use place labels instead of compressed descriptors in order to enhance the connection
             # between compressed representation and gpm focus on retrieving highly informative mini-batches
-            descriptors = descriptors.detach()
-            self.pbank.set_n_batches(self.trainer.num_training_batches)
+            descriptors = descriptors.cpu().detach()
             compressed_descriptors = self.phead(descriptors)
-            # print("Labels:", labels)
-            labels = torch.flatten(torch.stack(labels))
-            # self.phead.fit(descriptors, labels)
-            # print(compressed_descriptors.shape, labels.shape)
-            loss = self.phead.loss_fn(compressed_descriptors, labels)
+
+            proxy_loss = self.phead.loss_fn(compressed_descriptors, labels)
             self.phead.optimizer.zero_grad()
-            loss.backward(retain_graph=True)
+            proxy_loss.backward(retain_graph=True)
             self.phead.optimizer.step()
             compressed_descriptors = compressed_descriptors.cpu().detach()
             self.pbank.update_bank(compressed_descriptors, labels)
-        else:
-            labels = labels.view(num_places * num_images_per_place)
+            ids = self.pbank.build_index()
+            self.trainer.train_dataloader = \
+                    DataLoader(dataset=self.trainer.train_dataloader.dataset,
+                    batch_sampler=utils.HardSampler(indexes_list=ids),
+                    num_workers=args.num_workers)
+
 
         self.log('loss', loss.item(), logger=True)
         return {'loss': loss}
@@ -164,15 +173,11 @@ if __name__ == '__main__':
     train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args)
     if args.gpm:
         proxy_head = utils.ProxyHead(out_dim=128, in_dim=args.descriptors_dim)
-        proxy_bank = utils.ProxyBank(top_places=4, dim=128)
-        batch_sampler = utils.ProxyBatchSampler(bank=proxy_bank, batch_size=args.batch_size,
-                                                img_per_place=args.img_per_place)
-        batch_sampler.set_labels(train_dataset.places_ids, shuffle=True)
+        proxy_bank = utils.ProxyBank(k=4)
         kwargs.update({"proxy_bank": proxy_bank, "proxy_head": proxy_head})
-        train_loader = DataLoader(dataset=train_dataset, num_workers=args.num_workers, batch_sampler=batch_sampler)
 
     if args.feature_mixing:
-        mix = utils.MixVPR(in_channels=3, in_h=224, in_w=224,
+        mix = utils.MixVPR(in_channels=128, in_h=28, in_w=28,
                            out_channels=2, out_rows=64, mix_depth=4)
         kwargs.update({"mix": mix})
 
