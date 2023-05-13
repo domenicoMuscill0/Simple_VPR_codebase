@@ -41,7 +41,7 @@ class GeM(nn.Module):
 
 
 class GeoModel(pl.LightningModule):
-    def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True, loss_margin=0.45, loss_scale=64, num_classes):
+    def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True, loss_margin=0.45, loss_scale=64, num_classes=10):
         super().__init__()
         self.val_dataset = val_dataset
         self.test_dataset = test_dataset
