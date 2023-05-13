@@ -56,7 +56,7 @@ class GeoModel(pl.LightningModule):
         # Set the loss function
         #self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
         print(loss_margin)
-        self.loss_fn = losses.CosFaceLoss(num_classes,descriptors_dim, loss_margin, loss_scale)
+        self.loss_fn = losses.CosFaceLoss(num_classes=num_classes,embedding_size=descriptors_dim, margin=loss_margin, scale=loss_scale)
         self.save_hyperparameters()
 
     def forward(self, images):
