@@ -41,7 +41,7 @@ class GeM(nn.Module):
 
 
 class GeoModel(pl.LightningModule):
-    def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True):
+    def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True, loss_margin=0.45, loss_scale=64, num_classes):
         super().__init__()
         self.val_dataset = val_dataset
         self.test_dataset = test_dataset
@@ -54,7 +54,8 @@ class GeoModel(pl.LightningModule):
         self.model.fc = torch.nn.Linear(self.model.fc.in_features, descriptors_dim)
         self.model.avgpool = GeM()
         # Set the loss function
-        self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
+        #self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
+        self.loss_fn = losses.CosFaceLoss(num_classes,descriptors_dim, loss_margin, loss_scale)
         self.save_hyperparameters()
 
     def forward(self, images):
@@ -145,7 +146,8 @@ if __name__ == '__main__':
 
     train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args)
     kwargs = {"val_dataset": val_dataset, "test_dataset": test_dataset, "descriptors_dim": args.descriptors_dim,
-              "num_preds_to_save": args.num_preds_to_save, "save_only_wrong_preds": args.save_only_wrong_preds}
+              "num_preds_to_save": args.num_preds_to_save, "save_only_wrong_preds": args.save_only_wrong_preds,
+              "loss_margin":args.margin, "loss_scale":args.scale, "num_classes":len(train_dataset)}
     if args.load_checkpoint == "yes":
         model = GeoModel.load_from_checkpoint(args.checkpoint_path + "/" + os.listdir(args.checkpoint_path)[-1])
     elif args.load_checkpoint == "no":
@@ -159,13 +161,15 @@ if __name__ == '__main__':
         neptune_logger = NeptuneLogger(
             api_key=args.neptune_api_key,  # replace with your own
             project="MLDL/geolocalization",  # format "workspace-name/project-name"
-            tags=["training", "resnet", "prove_loss", "gem", "contrastive-loss"],  # optional
+            tags=["training", "resnet", "prove_loss", "gem", "large-margin-cosine-loss"],  # optional
             log_model_checkpoints=False,
         )
         PARAMS = {
             "batch_size": args.batch_size,
             "lr": 0.001,
             "max_epochs": args.max_epochs,
+            "margin": args.margin,
+            "scale": args.scale
         }
 
         neptune_logger.log_hyperparams(params=PARAMS)
