@@ -8,15 +8,17 @@ from torch.utils.data.dataloader import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import NeptuneLogger
 import utils
-import sklearn
 import parser
 from datasets.test_dataset import TestDataset
 from datasets.train_dataset import TrainDataset
 import os
 
 torch.set_float32_matmul_precision("highest")
+torch.cuda.set_per_process_memory_fraction(1/3, torch.cuda.current_device())  # Use only 1/3 of the available memory
 
-
+s = 32
+dev = torch.device('cuda')
+torch.nn.functional.conv2d(torch.zeros(s, s, s, s, device=dev), torch.zeros(s, s, s, s, device=dev))
 class GeoModel(pl.LightningModule):
     def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True,
                  proxy_bank: utils.ProxyBank = None, proxy_head: utils.ProxyHead = None,
@@ -45,7 +47,7 @@ class GeoModel(pl.LightningModule):
             self.model.fc = None
         # Set the loss function
         self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
-        self.save_hyperparameters()
+        self.save_hyperparameters(ignore=['proxy_head'])
 
     def forward(self, images):
         # Ask if in the GPM paper use the descriptors or the compressed representation.
@@ -59,7 +61,7 @@ class GeoModel(pl.LightningModule):
             descriptors = self.model.layer2(descriptors)
             descriptors = self.mix(descriptors)
         else:
-          descriptors = self.model(images)
+            descriptors = self.model(images)
         # What if we apply layer2, mixvpr without reducing dimensionality, layer3, mixvpr,
         # sum previous mixvpr, layer4 and again mixvpr and we sum also previous mixvpr?
         # Could it be beneficial to extract holistic features at multiple stages? Computationally it is affordable since
@@ -75,10 +77,6 @@ class GeoModel(pl.LightningModule):
         loss = self.loss_fn(descriptors, labels)
         return loss
 
-    # def setup(self, stage: str) -> None:  GIVES inf TRAINING BATCHES
-    #     if args.gpm:
-    #         self.pbank.set_n_batches(self.trainer.num_training_batches)
-
     # This is the training step that's executed at each iteration
     def training_step(self, batch, batch_idx):
         images, labels = batch
@@ -92,21 +90,20 @@ class GeoModel(pl.LightningModule):
         if args.gpm:
             # We use place labels instead of compressed descriptors in order to enhance the connection
             # between compressed representation and gpm focus on retrieving highly informative mini-batches
-            descriptors = descriptors.cpu().detach()
+            descriptors = descriptors.detach()
             compressed_descriptors = self.phead(descriptors)
 
             proxy_loss = self.phead.loss_fn(compressed_descriptors, labels)
             self.phead.optimizer.zero_grad()
             proxy_loss.backward(retain_graph=True)
             self.phead.optimizer.step()
-            compressed_descriptors = compressed_descriptors.cpu().detach()
+            compressed_descriptors = compressed_descriptors.detach()
             self.pbank.update_bank(compressed_descriptors, labels)
             ids = self.pbank.build_index()
             self.trainer.train_dataloader = \
-                    DataLoader(dataset=self.trainer.train_dataloader.dataset,
-                    batch_sampler=utils.HardSampler(indexes_list=ids),
-                    num_workers=args.num_workers)
-
+                DataLoader(dataset=self.trainer.train_dataloader.dataset,
+                           batch_sampler=utils.HardSampler(indexes_list=ids),
+                           num_workers=args.num_workers)
 
         self.log('loss', loss.item(), logger=True)
         return {'loss': loss}
@@ -169,17 +166,25 @@ if __name__ == '__main__':
     args = parser.parse_arguments()
     kwargs = {"descriptors_dim": args.descriptors_dim, "num_preds_to_save": args.num_preds_to_save,
               "save_only_wrong_preds": args.save_only_wrong_preds}
+    neptune_tags = []
 
     train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args)
     if args.gpm:
         proxy_head = utils.ProxyHead(out_dim=128, in_dim=args.descriptors_dim)
         proxy_bank = utils.ProxyBank(k=4)
         kwargs.update({"proxy_bank": proxy_bank, "proxy_head": proxy_head})
+        neptune_tags.append("gpm")
 
     if args.feature_mixing:
         mix = utils.MixVPR(in_channels=128, in_h=28, in_w=28,
                            out_channels=2, out_rows=64, mix_depth=4)
         kwargs.update({"mix": mix})
+        neptune_tags.append("mixvpr")
+        if args.gpm:
+            proxy_head = utils.ProxyHead(out_dim=64, in_dim=128)
+            proxy_bank = utils.ProxyBank(k=4, dim=64)
+            kwargs["proxy_head"] = proxy_head
+            kwargs["proxy_bank"] = proxy_bank
 
     kwargs.update({"val_dataset": val_dataset, "test_dataset": test_dataset})
     if args.load_checkpoint:
@@ -200,7 +205,7 @@ if __name__ == '__main__':
         neptune_logger = NeptuneLogger(
             api_key=args.neptune_api_key,  # replace with your own
             project="MLDL/geolocalization",  # format "workspace-name/project-name"
-            tags=["training", "resnet", "prove_iniziali", "gem"],  # optional
+            tags=neptune_tags,
             log_model_checkpoints=False,
         )
         PARAMS = {

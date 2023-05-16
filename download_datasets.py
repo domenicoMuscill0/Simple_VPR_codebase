@@ -1,8 +1,8 @@
 
 URLS = {
-    "tokyo_xs": "https://drive.google.com/file/d/15QB3VNKj93027UAQWv7pzFQO1JDCdZj2/view?usp=share_link",
-    "sf_xs": "https://drive.google.com/file/d/1tQqEyt3go3vMh4fj_LZrRcahoTbzzH-y/view?usp=share_link",
-    "gsv_xs": "https://drive.google.com/file/d/1q7usSe9_5xV5zTfN-1In4DlmF5ReyU_A/view?usp=share_link"
+    "tokyo_xs": "https://drive.google.com/file/d/1bY-2wV4HmfUQC_O_CWlDHYL_bOOifTMZ/view?usp=share_link",
+    "sf_xs": "https://drive.google.com/file/d/1sNtAgMYjHZYRHyAdBB4XuyEKB7G452OJ/view?usp=share_link",
+    "gsv_xs": "https://drive.google.com/file/d/1bJC4jWuFNio397PfVrQO53ET3zVvI08u/view?usp=share_link"
 }
 
 import os

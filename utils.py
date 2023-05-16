@@ -3,6 +3,7 @@ import faiss
 import logging
 from typing import Tuple
 import pytorch_lightning as pl
+from pytorch_lightning.loggers import NeptuneLogger
 from pytorch_metric_learning import losses
 from matplotlib import pyplot as plt
 from torch.utils.data import BatchSampler, Sampler
@@ -91,6 +92,7 @@ class ProxyHead(nn.Module):
         super().__init__()
         a, b = in_dim, -np.log(out_dim / in_dim) / n_layers
         dims = np.ceil(a * np.exp(-b * np.arange(n_layers + 1))).astype(np.int16)
+        print("DIMENSIONI LINEAR", dims)
         self.reduction = [nn.Flatten()] + \
                      [nn.Sequential(nn.Linear(dims[i], dims[i + 1]), nn.ReLU()) for i in range(n_layers)] + \
                      [nn.BatchNorm1d(out_dim)]
@@ -110,17 +112,17 @@ class ProxyHead(nn.Module):
         loss.backward(retain_graph=True)
         self.optimizer.step()
 
+def proxy_factory(dim):
+  return lambda: ProxyBank.Proxy(dim)
 
 class ProxyBank:
     """This class stores the places' proxies together with their identifier
        and performs exhaustive search on the index to retrieve the mini-batch sampling pool."""
 
-    def __init__(self, k: int = 10, bank=None):
-        if bank is None:
-            bank = defaultdict(ProxyBank.Proxy)
-        self.__bank = bank
+    def __init__(self, k: int = 10, dim: int =128, bank=None):
+        self.__bank = defaultdict(proxy_factory(dim))
         self.k = k
-        self.dim = 128
+        self.dim = dim
         self.nb_samples = self.dim
         self.index = faiss.index_factory(self.dim, 'IDMap,Flat')
 
@@ -131,7 +133,7 @@ class ProxyBank:
         for d, l in zip(embs, labels):
             self.__bank[l.item()] = self.__bank[l.item()] + ProxyBank.Proxy(d)
         idx = np.arange(self.nb_samples)
-        embs_by_idx = torch.stack([self.__bank[i].get() for i in idx])
+        embs_by_idx = torch.stack([self.__bank[i].get() for i in idx]).cpu()
         self.index.add_with_ids(embs_by_idx, idx)
 
     def build_index(self):
@@ -140,10 +142,10 @@ class ProxyBank:
         """
 
         embs = self.__bank.values()
-        embs = list(map(lambda emb: emb.get(), embs))
+        embs = list(map(lambda emb: emb.get().cpu(), embs))
         embs = np.vstack(embs)
 
-        labels = np.array(list(self.__bank.keys()))
+        labels = torch.Tensor(list(self.__bank.keys()))
 
         s = {}
         for e in range(self.nb_samples):
@@ -218,7 +220,7 @@ class GeM(nn.Module):
 
 def compute_recalls(eval_ds: TestDataset, queries_descriptors: np.ndarray, database_descriptors: np.ndarray,
                     output_folder: str = None, num_preds_to_save: int = 0,
-                    save_only_wrong_preds: bool = True) -> Tuple[np.ndarray, str]:
+                    save_only_wrong_preds: bool = True, logger: NeptuneLogger = None) -> Tuple[np.ndarray, str]:
     """Compute the recalls given the queries and database descriptors. The dataset is needed to know the ground truth
     positives for each query."""
 
@@ -227,7 +229,9 @@ def compute_recalls(eval_ds: TestDataset, queries_descriptors: np.ndarray, datab
     faiss_index.add(database_descriptors)
     del database_descriptors
 
-    logging.debug("Calculating recalls")
+    if logger is None:
+        logging.debug("Calculating recalls")
+
     _, predictions = faiss_index.search(queries_descriptors, max(RECALL_VALUES))
 
     # For each query, check if the predictions are correct
@@ -245,6 +249,7 @@ def compute_recalls(eval_ds: TestDataset, queries_descriptors: np.ndarray, datab
     # Save visualizations of predictions
     if num_preds_to_save != 0:
         # For each query save num_preds_to_save predictions
-        visualizations.save_preds(predictions[:, :num_preds_to_save], eval_ds, output_folder, save_only_wrong_preds)
+        visualizations.save_preds(predictions[:, :num_preds_to_save], eval_ds, output_folder,
+                                  save_only_wrong_preds, logger=logger)
 
     return recalls, recalls_str
