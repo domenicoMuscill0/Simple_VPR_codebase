@@ -1,28 +1,30 @@
-import torch
-import numpy as np
 import torchvision.models
 import pytorch_lightning as pl
 from torchvision import transforms as tfm
-from pytorch_metric_learning import losses
 from torch.utils.data.dataloader import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import NeptuneLogger
-import utils
 import parser
+from utils import compute_recalls
+from modules.MixVPR import *
+from modules.GeM import GeM
+from modules.GPM import *
 from datasets.test_dataset import TestDataset
 from datasets.train_dataset import TrainDataset
 import os
 
 torch.set_float32_matmul_precision("highest")
-torch.cuda.set_per_process_memory_fraction(1/3, torch.cuda.current_device())  # Use only 1/3 of the available memory
+torch.cuda.set_per_process_memory_fraction(1 / 3, torch.cuda.current_device())  # Use only 1/3 of the available memory
 
 s = 32
 dev = torch.device('cuda')
 torch.nn.functional.conv2d(torch.zeros(s, s, s, s, device=dev), torch.zeros(s, s, s, s, device=dev))
+
+
 class GeoModel(pl.LightningModule):
     def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True,
-                 proxy_bank: utils.ProxyBank = None, proxy_head: utils.ProxyHead = None,
-                 mix: utils.MixVPR = None):
+                 proxy_bank: ProxyBank = None, proxy_head: ProxyHead = None,
+                 mix: MixVPR = None):
         super().__init__()
         self.val_dataset = val_dataset
         self.test_dataset = test_dataset
@@ -32,7 +34,7 @@ class GeoModel(pl.LightningModule):
         self.model = torchvision.models.resnet18(weights=torchvision.models.ResNet18_Weights.DEFAULT)
         # Change the output of the FC layer to the desired descriptors dimension
         self.model.fc = torch.nn.Linear(self.model.fc.in_features, descriptors_dim)
-        self.model.avgpool = utils.GeM()
+        self.model.avgpool = GeM()
         # Instantiate the Proxy Head and Proxy Bank
         if args.gpm:
             self.phead = proxy_head
@@ -97,12 +99,12 @@ class GeoModel(pl.LightningModule):
             self.phead.optimizer.zero_grad()
             proxy_loss.backward(retain_graph=True)
             self.phead.optimizer.step()
-            compressed_descriptors = compressed_descriptors.detach()
+            compressed_descriptors = compressed_descriptors.detach().cpu()
             self.pbank.update_bank(compressed_descriptors, labels)
             ids = self.pbank.build_index()
             self.trainer.train_dataloader = \
                 DataLoader(dataset=self.trainer.train_dataloader.dataset,
-                           batch_sampler=utils.HardSampler(indexes_list=ids),
+                           batch_sampler=HardSampler(indexes_list=ids),
                            num_workers=args.num_workers)
 
         self.log('loss', loss.item(), logger=True)
@@ -132,10 +134,10 @@ class GeoModel(pl.LightningModule):
         queries_descriptors = all_descriptors[inference_dataset.database_num:]
         database_descriptors = all_descriptors[: inference_dataset.database_num]
 
-        recalls, recalls_str = utils.compute_recalls(
+        recalls, recalls_str = compute_recalls(
             inference_dataset, queries_descriptors, database_descriptors,
             output_folder=trainer.logger.log_dir, num_preds_to_save=num_preds_to_save,
-            save_only_wrong_preds=self.save_only_wrong_preds
+            save_only_wrong_preds=self.save_only_wrong_preds, logger=trainer.logger
         )
         print(recalls_str)
         self.log('R@1', recalls[0], prog_bar=False, logger=True)
@@ -170,19 +172,19 @@ if __name__ == '__main__':
 
     train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args)
     if args.gpm:
-        proxy_head = utils.ProxyHead(out_dim=128, in_dim=args.descriptors_dim)
-        proxy_bank = utils.ProxyBank(k=4)
+        proxy_head = ProxyHead(out_dim=128, in_dim=args.descriptors_dim)
+        proxy_bank = ProxyBank(k=4)
         kwargs.update({"proxy_bank": proxy_bank, "proxy_head": proxy_head})
         neptune_tags.append("gpm")
 
     if args.feature_mixing:
-        mix = utils.MixVPR(in_channels=128, in_h=28, in_w=28,
-                           out_channels=2, out_rows=64, mix_depth=4)
+        mix = MixVPR(in_channels=128, in_h=28, in_w=28,
+                     out_channels=2, out_rows=64, mix_depth=4)
         kwargs.update({"mix": mix})
         neptune_tags.append("mixvpr")
         if args.gpm:
-            proxy_head = utils.ProxyHead(out_dim=64, in_dim=128)
-            proxy_bank = utils.ProxyBank(k=4, dim=64)
+            proxy_head = ProxyHead(out_dim=64, in_dim=128)
+            proxy_bank = ProxyBank(k=4, dim=64)
             kwargs["proxy_head"] = proxy_head
             kwargs["proxy_bank"] = proxy_bank
 
@@ -223,7 +225,7 @@ if __name__ == '__main__':
             precision=16,  # we use half precision to reduce  memory usage
             max_epochs=args.max_epochs,
             check_val_every_n_epoch=1,  # run validation every epoch
-            # callbacks=[checkpoint_cb, descriptor_printer_cb],
+            # callbacks=[checkpoint_cb],
             reload_dataloaders_every_n_epochs=1,  # we reload the dataset to shuffle the order
             log_every_n_steps=20,
             logger=neptune_logger,
@@ -238,7 +240,7 @@ if __name__ == '__main__':
             precision=16,  # we use half precision to reduce  memory usage
             max_epochs=args.max_epochs,
             check_val_every_n_epoch=1,  # run validation every epoch
-            # callbacks=[checkpoint_cb, descriptor_printer_cb],
+            # callbacks=[checkpoint_cb],
             # we only run the checkpointing callback (you can add more)
             reload_dataloaders_every_n_epochs=1,  # we reload the dataset to shuffle the order
             log_every_n_steps=20,

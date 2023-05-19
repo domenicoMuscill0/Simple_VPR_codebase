@@ -126,5 +126,5 @@ def save_preds(predictions, eval_ds, output_folder, save_only_wrong_preds=None, 
         else:
             logger.experiment[pred_image_path].log(File.as_image(prediction_image))
             [logger.experiment[f"{output_folder}/positives/{query_index:03d}_P{i}.jpg"].log(File.as_image(Image.open(path)))
-                           for i, path in enumerate(positives_paths)]
+                           for i, path in enumerate(positives_paths[:4])]
 
