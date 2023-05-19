@@ -11,7 +11,7 @@ RECALL_VALUES = [1, 5, 10, 20]
 
 
 def compute_recalls(eval_ds: TestDataset, queries_descriptors: np.ndarray, database_descriptors: np.ndarray,
-                    output_folder: str = None, num_preds_to_save: int = 0,
+                    output_folder: str = None, num_preds_to_save: int = 0, num_queries_to_save: int = 0,
                     save_only_wrong_preds: bool = True, logger: NeptuneLogger = None) -> Tuple[np.ndarray, str]:
     """Compute the recalls given the queries and database descriptors. The dataset is needed to know the ground truth
     positives for each query."""
@@ -41,7 +41,7 @@ def compute_recalls(eval_ds: TestDataset, queries_descriptors: np.ndarray, datab
     # Save visualizations of predictions
     if num_preds_to_save != 0:
         # For each query save num_preds_to_save predictions
-        visualizations.save_preds(predictions[:, :num_preds_to_save], eval_ds, output_folder,
+        visualizations.save_preds(predictions[:num_queries_to_save, :num_preds_to_save], eval_ds, output_folder,
                                   save_only_wrong_preds, logger=logger)
 
     return recalls, recalls_str

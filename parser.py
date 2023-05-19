@@ -21,8 +21,10 @@ def parse_arguments():
     # Architecture parameters
     parser.add_argument("--descriptors_dim", type=int, default=512,
                         help="dimensionality of the output descriptors")
-    parser.add_argument("--feature_mixing", default=False, action=argparse.BooleanOptionalAction,
-                        help="whether to adopt Feature Mixing module")
+    # parser.add_argument("--feature_mixing", default=False, action=argparse.BooleanOptionalAction,
+    #                     help="whether to adopt Feature Mixing module")
+    parser.add_argument('--feature_mixing', action='store_true')
+    parser.add_argument('--no-feature_mixing', dest='feature_mixing', action='store_false')
     # parser.add_argument("--gpm", default=False, action=argparse.BooleanOptionalAction,
     #                     help="whether to adopt Global Proxy Mining module")
     # Solo per Kaggle. Se usi Colab usa l'altra versione
@@ -31,9 +33,10 @@ def parse_arguments():
     parser.set_defaults(gpm=True)
     
     # Visualizations parameters
-    parser.add_argument("--num_preds_to_save", type=int, default=0,
-                        help="At the end of training, save N preds for each query. "
-                        "Try with a small number like 3")
+    parser.add_argument("--num_preds_to_save", type=int, default=3,
+                        help="At the end of training, save N preds for each query. ")
+    parser.add_argument("--num_queries_to_save", type=int, default=10,
+                        help="At the end of training, save N queries. ")
     parser.add_argument("--save_only_wrong_preds", action="store_true",
                         help="When saving preds (if num_preds_to_save != 0) save only "
                         "preds for difficult queries, i.e. with uncorrect first prediction")

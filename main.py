@@ -135,8 +135,8 @@ class GeoModel(pl.LightningModule):
         database_descriptors = all_descriptors[: inference_dataset.database_num]
 
         recalls, recalls_str = compute_recalls(
-            inference_dataset, queries_descriptors, database_descriptors,
-            output_folder=trainer.logger.log_dir, num_preds_to_save=num_preds_to_save,
+            inference_dataset, queries_descriptors, database_descriptors, num_queries_to_save=args.num_queries_to_save,
+            output_folder=args.log_path, num_preds_to_save=num_preds_to_save,
             save_only_wrong_preds=self.save_only_wrong_preds, logger=trainer.logger
         )
         print(recalls_str)
@@ -208,7 +208,7 @@ if __name__ == '__main__':
             api_key=args.neptune_api_key,  # replace with your own
             project="MLDL/geolocalization",  # format "workspace-name/project-name"
             tags=neptune_tags,
-            log_model_checkpoints=False,
+            log_model_checkpoints=True
         )
         PARAMS = {
             "batch_size": args.batch_size,
@@ -225,11 +225,10 @@ if __name__ == '__main__':
             precision=16,  # we use half precision to reduce  memory usage
             max_epochs=args.max_epochs,
             check_val_every_n_epoch=1,  # run validation every epoch
-            # callbacks=[checkpoint_cb],
+            callbacks=[checkpoint_cb],
             reload_dataloaders_every_n_epochs=1,  # we reload the dataset to shuffle the order
             log_every_n_steps=20,
-            logger=neptune_logger,
-            # limit_train_batches=len(train_dataset) if args.gpm else None
+            logger=neptune_logger
         )
     else:
         trainer = pl.Trainer(
@@ -240,11 +239,10 @@ if __name__ == '__main__':
             precision=16,  # we use half precision to reduce  memory usage
             max_epochs=args.max_epochs,
             check_val_every_n_epoch=1,  # run validation every epoch
-            # callbacks=[checkpoint_cb],
+            callbacks=[checkpoint_cb],
             # we only run the checkpointing callback (you can add more)
             reload_dataloaders_every_n_epochs=1,  # we reload the dataset to shuffle the order
-            log_every_n_steps=20,
-            # limit_train_batches=len(train_dataset) if args.gpm else None
+            log_every_n_steps=20
         )
 
     # trainer.validate(model=model, dataloaders=val_loader)
