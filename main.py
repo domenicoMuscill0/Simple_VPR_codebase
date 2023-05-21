@@ -169,7 +169,9 @@ if __name__ == '__main__':
             "lr": 0.001,
             "max_epochs": args.max_epochs,
             "margin": args.margin,
-            "scale": args.scale
+            "scale": args.scale,
+            "test_set": args.test_path,
+            "val_set": args.val_path
         }
 
         neptune_logger.log_hyperparams(params=PARAMS)
