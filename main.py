@@ -68,6 +68,8 @@ class GeoModel(pl.LightningModule):
             optimizers = torch.optim.AdamW(self.parameters(), lr=args.learning_rate, weight_decay=0.001)
         if args.optimizer == "ASGD":
             optimizers = torch.optim.ASGD(self.parameters(), lr=args.learning_rate, weight_decay=0.001)
+        if args.optimizer == "Adam":
+            optimizers = torch.optim.Adam(self.parameters(), lr=args.learning_rate)
         return optimizers
 
     #  The loss function call (this method will be called at each training iteration)
