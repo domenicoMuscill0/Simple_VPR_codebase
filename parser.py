@@ -25,12 +25,17 @@ def parse_arguments():
     #                     help="whether to adopt Feature Mixing module")
     parser.add_argument('--feature_mixing', action='store_true')
     parser.add_argument('--no-feature_mixing', dest='feature_mixing', action='store_false')
+
     # parser.add_argument("--gpm", default=False, action=argparse.BooleanOptionalAction,
     #                     help="whether to adopt Global Proxy Mining module")
     # Solo per Kaggle. Se usi Colab usa l'altra versione
     parser.add_argument('--gpm', action='store_true')
     parser.add_argument('--no-gpm', dest='gpm', action='store_false')
-    parser.set_defaults(gpm=True)
+
+    # parser.add_argument("--template_injection", default=False, action=argparse.BooleanOptionalAction,
+    #                     help="whether to adopt Template Injector module")
+    parser.add_argument('--template_injection', action='store_true')
+    parser.add_argument('--no-template_injection', dest='template_injection', action='store_false')
     
     # Visualizations parameters
     parser.add_argument("--num_preds_to_save", type=int, default=3,

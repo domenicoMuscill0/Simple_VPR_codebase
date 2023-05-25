@@ -6,12 +6,15 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import NeptuneLogger
 import parser
 from utils import compute_recalls
+from modules.TI import TemplateInjector
 from modules.MixVPR import *
 from modules.GeM import GeM
 from modules.GPM import *
 from datasets.test_dataset import TestDataset
 from datasets.train_dataset import TrainDataset
 import os
+
+torch.cuda.empty_cache()
 
 torch.set_float32_matmul_precision("highest")
 torch.cuda.set_per_process_memory_fraction(1 / 3, torch.cuda.current_device())  # Use only 1/3 of the available memory
@@ -47,6 +50,9 @@ class GeoModel(pl.LightningModule):
             self.model.layer4 = None
             self.model.avgpool = None
             self.model.fc = None
+        if args.template_injection:
+            self.ti = TemplateInjector(224)
+            self.t_lambda = 0.3
         # Set the loss function
         self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
         self.save_hyperparameters(ignore=['proxy_head'])
@@ -62,6 +68,11 @@ class GeoModel(pl.LightningModule):
             descriptors = self.model.layer1(descriptors)
             descriptors = self.model.layer2(descriptors)
             descriptors = self.mix(descriptors)
+        elif args.template_injection:
+            template_images = self.ti(images)
+            template_descriptors = self.model(template_images)
+            descriptors = self.model(images)
+            descriptors = descriptors + self.t_lambda*template_descriptors
         else:
             descriptors = self.model(images)
         # What if we apply layer2, mixvpr without reducing dimensionality, layer3, mixvpr,
@@ -176,6 +187,9 @@ if __name__ == '__main__':
         proxy_bank = ProxyBank(k=4)
         kwargs.update({"proxy_bank": proxy_bank, "proxy_head": proxy_head})
         neptune_tags.append("gpm")
+
+    if args.template_injection:
+        neptune_tags.append("template injection")
 
     if args.feature_mixing:
         mix = MixVPR(in_channels=128, in_h=28, in_w=28,
