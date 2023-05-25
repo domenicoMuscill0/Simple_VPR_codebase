@@ -41,7 +41,7 @@ class GeM(nn.Module):
 
 
 class GeoModel(pl.LightningModule):
-    def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True, loss_margin=0.45, loss_scale=64, num_classes=10):
+    def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True, loss_alpha=2, loss_beta=50,loss_base=0.5, num_classes=10):
         super().__init__()
         self.val_dataset = val_dataset
         self.test_dataset = test_dataset
@@ -55,7 +55,7 @@ class GeoModel(pl.LightningModule):
         self.model.avgpool = GeM()
         # Set the loss function
         #self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
-        self.loss_fn = losses.CosFaceLoss(num_classes=num_classes,embedding_size=descriptors_dim, margin=loss_margin, scale=loss_scale)
+        self.loss_fn = losses.MultiSimilarityLoss(loss_alpha, loss_beta, loss_base)
         self.save_hyperparameters()
 
     def forward(self, images):
@@ -80,6 +80,8 @@ class GeoModel(pl.LightningModule):
 
         # Feed forward the batch to the model
         descriptors = self(images)  # Here we are calling the method forward that we defined above
+        #miner_output = self.miner_func(descriptors, labels)  # in your training for-loop
+
         loss = self.loss_function(descriptors, labels)  # Call the loss_function we defined above
 
         self.log('loss', loss.item(), logger=True)
@@ -147,7 +149,7 @@ if __name__ == '__main__':
     train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args)
     kwargs = {"val_dataset": val_dataset, "test_dataset": test_dataset, "descriptors_dim": args.descriptors_dim,
               "num_preds_to_save": args.num_preds_to_save, "save_only_wrong_preds": args.save_only_wrong_preds,
-              "loss_margin":args.margin, "loss_scale":args.scale, "num_classes":len(train_dataset)}
+              "loss_alpha":args.alpha, "loss_beta":args.beta,"loss_base":args.base, "num_classes":len(train_dataset)}
     if args.load_checkpoint == "yes":
         model = GeoModel.load_from_checkpoint(args.checkpoint_path + "/" + os.listdir(args.checkpoint_path)[-1])
     elif args.load_checkpoint == "no":
@@ -161,15 +163,16 @@ if __name__ == '__main__':
         neptune_logger = NeptuneLogger(
             api_key=args.neptune_api_key,  # replace with your own
             project="MLDL/geolocalization",  # format "workspace-name/project-name"
-            tags=["training", "resnet", "prove_loss", "gem", "large-margin-cosine-loss"],  # optional
+            tags=["training", "resnet", "prove_loss", "gem", "MultiSimilarityLoss", "no-miner"],  # optional
             log_model_checkpoints=False,
         )
         PARAMS = {
             "batch_size": args.batch_size,
             "lr": 0.001,
             "max_epochs": args.max_epochs,
-            "margin": args.margin,
-            "scale": args.scale,
+            "alpha": args.alpha,
+            "beta": args.beta,
+            "base": args.base,
             "test_set": args.test_path,
             "val_set": args.val_path
         }
