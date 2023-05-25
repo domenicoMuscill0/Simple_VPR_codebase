@@ -71,8 +71,10 @@ class GeoModel(pl.LightningModule):
         elif args.template_injection:
             template_images = self.ti(images)
             template_descriptors = self.model(template_images)
+            del template_images
             descriptors = self.model(images)
             descriptors = descriptors + self.t_lambda*template_descriptors
+            del template_descriptors
         else:
             descriptors = self.model(images)
         # What if we apply layer2, mixvpr without reducing dimensionality, layer3, mixvpr,
