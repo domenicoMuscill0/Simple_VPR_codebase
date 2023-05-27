@@ -28,8 +28,8 @@ torch.nn.functional.conv2d(torch.zeros(s, s, s, s, device=dev), torch.zeros(s, s
 
 class GeoModel(pl.LightningModule):
     def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True,
-               proxy_bank: ProxyBank = None, proxy_head: ProxyHead = None,
-               mix: MixVPR = None):
+                 proxy_bank: ProxyBank = None, proxy_head: ProxyHead = None,
+                 mix: MixVPR = None):
         super().__init__()
         self.val_dataset = val_dataset
         self.test_dataset = test_dataset
@@ -101,7 +101,7 @@ class GeoModel(pl.LightningModule):
             # loss = loss + torch.max(torch.zeros_like(template_distance), self.margin - template_distance).mean()
             loss = self.loss_function(descriptors, template_descriptors)
         else:
-          loss = self.loss_function(descriptors, labels)  # Call the loss_function we defined above
+            loss = self.loss_function(descriptors, labels)  # Call the loss_function we defined above
         # Feed forward the batch to the model
         if args.gpm:
             # We use place labels instead of compressed descriptors in order to enhance the connection
