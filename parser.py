@@ -32,6 +32,11 @@ def parse_arguments():
     parser.add_argument('--gpm', action='store_true')
     parser.add_argument('--no-gpm', dest='gpm', action='store_false')
 
+    # parser.add_argument("--reweighting", default=False, action=argparse.BooleanOptionalAction,
+    #                     help="whether to adopt Contextual Feature Reweighting module")
+    parser.add_argument('--reweighting', action='store_true')
+    parser.add_argument('--no-reweighting', dest='reweighting', action='store_false')
+
     # parser.add_argument("--template_injection", default=False, action=argparse.BooleanOptionalAction,
     #                     help="whether to adopt Template Injector module")
     parser.add_argument('--template_injection', action='store_true')

@@ -1,10 +1,12 @@
 import torchvision.models
 import pytorch_lightning as pl
+from pytorch_metric_learning.losses import SelfSupervisedLoss
 from torchvision import transforms as tfm
 from torch.utils.data.dataloader import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import NeptuneLogger
 import parser
+from modules.ContextualReweighting import CRN
 from utils import compute_recalls
 from modules.TI import TemplateInjector
 from modules.MixVPR import *
@@ -25,58 +27,50 @@ torch.nn.functional.conv2d(torch.zeros(s, s, s, s, device=dev), torch.zeros(s, s
 
 
 class GeoModel(pl.LightningModule):
-    def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True,
-                 proxy_bank: ProxyBank = None, proxy_head: ProxyHead = None,
-                 mix: MixVPR = None):
+    def _init_(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True,
+               proxy_bank: ProxyBank = None, proxy_head: ProxyHead = None,
+               mix: MixVPR = None):
         super().__init__()
         self.val_dataset = val_dataset
         self.test_dataset = test_dataset
         self.num_preds_to_save = num_preds_to_save
         self.save_only_wrong_preds = save_only_wrong_preds
+
         # Use a pretrained model
         self.model = torchvision.models.resnet18(weights=torchvision.models.ResNet18_Weights.DEFAULT)
+
         # Change the output of the FC layer to the desired descriptors dimension
         self.model.fc = torch.nn.Linear(self.model.fc.in_features, descriptors_dim)
         self.model.avgpool = GeM()
+
+        # Set the loss function
+        self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
+        self.save_hyperparameters(ignore=['proxy_head'])
+
         # Instantiate the Proxy Head and Proxy Bank
         if args.gpm:
             self.phead = proxy_head
             self.pbank = proxy_bank
         if args.feature_mixing:
             # It dodes not pass over the constructor
-            self.mix = mix
-            # [print("AOOOOOOOOOOOOOOOOO", k) for k, m in self.model.named_modules()]
-            self.model.layer3 = None
-            self.model.layer4 = None
-            self.model.avgpool = None
-            self.model.fc = None
+            self.model = nn.Sequential(*self.model.children()[:-2], mix)
         if args.template_injection:
             self.ti = TemplateInjector(224)
-            self.t_lambda = 0.3
-        # Set the loss function
-        self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
-        self.save_hyperparameters(ignore=['proxy_head'])
+            self.loss_fn = SelfSupervisedLoss(self.loss_fn)
+            self.margin = 2
+        if args.reweighting:
+            self.model = nn.Sequential(*self.model[-2])  # convolutional part
+            self.CRN = CRN()
 
     def forward(self, images):
-        # Ask if in the GPM paper use the descriptors or the compressed representation.
-        # Ask also if we store in the proxy bank the places proxies of only one batch or all the batches
-        if args.feature_mixing:
-            descriptors = self.model.conv1(images)
-            descriptors = self.model.bn1(descriptors)
-            descriptors = self.model.relu(descriptors)
-            descriptors = self.model.maxpool(descriptors)
-            descriptors = self.model.layer1(descriptors)
-            descriptors = self.model.layer2(descriptors)
-            descriptors = self.mix(descriptors)
-        elif args.template_injection:
-            template_images = self.ti(images)
-            template_descriptors = self.model(template_images)
-            del template_images
-            descriptors = self.model(images)
-            descriptors = descriptors + self.t_lambda*template_descriptors
-            del template_descriptors
-        else:
-            descriptors = self.model(images)
+        # if args.template_injection:
+        #     template_images = self.ti(images)
+        #     template_descriptors = self.model(template_images)
+        #     del template_images
+        #     descriptors = self.model(images)
+        #     descriptors = descriptors + self.t_lambda*template_descriptors
+        #     del template_descriptors
+        descriptors = self.model(images)
         # What if we apply layer2, mixvpr without reducing dimensionality, layer3, mixvpr,
         # sum previous mixvpr, layer4 and again mixvpr and we sum also previous mixvpr?
         # Could it be beneficial to extract holistic features at multiple stages? Computationally it is affordable since
@@ -100,7 +94,12 @@ class GeoModel(pl.LightningModule):
         descriptors = self(images)
         labels = labels.view(num_places * num_images_per_place)
         loss = self.loss_function(descriptors, labels)  # Call the loss_function we defined above
-
+        if args.template_injection:
+            template_descriptors = self.ti(images)
+            template_descriptors = self(template_descriptors)
+            template_distance = torch.norm(descriptors - template_descriptors, p=2, dim=1)
+            # loss = loss + torch.max(torch.zeros_like(template_distance), self.margin - template_distance).mean()
+            loss = self.loss_function(descriptors, template_descriptors)
         # Feed forward the batch to the model
         if args.gpm:
             # We use place labels instead of compressed descriptors in order to enhance the connection
@@ -177,7 +176,7 @@ def get_datasets_and_dataloaders(args):
     return train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader
 
 
-if __name__ == '__main__':
+if __name__ == '_main_':
     args = parser.parse_arguments()
     kwargs = {"descriptors_dim": args.descriptors_dim, "num_preds_to_save": args.num_preds_to_save,
               "save_only_wrong_preds": args.save_only_wrong_preds}

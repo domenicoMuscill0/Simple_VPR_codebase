@@ -25,7 +25,7 @@ img_counters = [
 ]
 
 
-def is_blurry(image, threshold=20):
+def is_blurry(image, threshold=50):
     try:
         gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
     except cv2.error:
