@@ -10,8 +10,7 @@ from torch.utils.data import Sampler
 
 
 class ProxyHead(nn.Module):
-    def __init__(self, out_dim: int = 32, in_dim: int = 128,
-                 n_classes: int = 23, n_layers: int = 3):
+    def __init__(self, out_dim: int = 32, in_dim: int = 128, n_layers: int = 3):
         super().__init__()
         a, b = in_dim, -np.log(out_dim / in_dim) / n_layers
         dims = np.ceil(a * np.exp(-b * np.arange(n_layers + 1))).astype(np.int16)

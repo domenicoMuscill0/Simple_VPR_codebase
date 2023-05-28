@@ -56,7 +56,7 @@ class GeoModel(pl.LightningModule):
             self.model = nn.Sequential(*list(self.model.children())[:-2], mix)
         if args.template_injection:
             self.ti = TemplateInjector(224)
-            self.loss_fn = SelfSupervisedLoss(self.loss_fn)
+            # self.loss_fn = SelfSupervisedLoss(self.loss_fn)
             self.margin = 2
         if args.reweighting:
             self.model = nn.Sequential(*list(self.model.children())[:-2])  # convolutional part

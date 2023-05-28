@@ -36,7 +36,6 @@ class TemplateInjector(nn.Module):
             template_path = random.choice(self.template_paths)
             template = Image.open(template_path).convert("RGB")
             template = self.adjust_template(template).to(self.device)
-            # template = template.permute((1, 2, 0))
             tl_h, tl_w = random.randint(int(2 / 3 * self.image_dim), self.image_dim - self.template_h), \
                 random.randint(self.template_w, self.image_dim - self.template_w)
             mask = (template != 0)
