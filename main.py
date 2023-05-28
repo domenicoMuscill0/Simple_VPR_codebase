@@ -101,9 +101,9 @@ class GeoModel(pl.LightningModule):
             template_descriptors = self(template_descriptors)
             template_distance = torch.norm(descriptors - template_descriptors, p=2, dim=1)
             # loss = loss + torch.max(torch.zeros_like(template_distance), self.margin - template_distance).mean()
-            loss = self.loss_function(descriptors, template_descriptors)
-        else:
-            loss = self.loss_function(descriptors, labels)  # Call the loss_function we defined above
+        #     loss = self.loss_function(descriptors, template_descriptors)
+        # else:
+        loss = self.loss_function(descriptors, labels)  # Call the loss_function we defined above
         # Feed forward the batch to the model
         if args.gpm:
             # We use place labels instead of compressed descriptors in order to enhance the connection
