@@ -9,7 +9,7 @@ from typing import Tuple
 
 class TemplateInjector(nn.Module):
     def __init__(self, image_dim: int, template_dim_reduction: Tuple[int, int] = (5, 4)):
-        super().__init__()
+        super(TemplateInjector, self).__init__()
         self.template_paths = glob(f"./templates/**/*.png", recursive=True)  # Path to templates to inject
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.image_dim = image_dim

@@ -6,7 +6,7 @@ from torch.utils.data.dataloader import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import NeptuneLogger
 import parser
-from modules.ContextualReweighting import CRN
+from modules.ReweightVLAD import ReweightVLAD
 from utils import compute_recalls
 from modules.TI import TemplateInjector
 from modules.MixVPR import *
@@ -60,21 +60,23 @@ class GeoModel(pl.LightningModule):
             self.margin = 2
         if args.reweighting:
             self.model = nn.Sequential(*self.model[-2])  # convolutional part
-            self.CRN = CRN()
+            self.reweighting = ReweightVLAD(dim=49, alpha=75)
 
     def forward(self, images):
-        # if args.template_injection:
-        #     template_images = self.ti(images)
-        #     template_descriptors = self.model(template_images)
-        #     del template_images
-        #     descriptors = self.model(images)
-        #     descriptors = descriptors + self.t_lambda*template_descriptors
-        #     del template_descriptors
-        descriptors = self.model(images)
-        # What if we apply layer2, mixvpr without reducing dimensionality, layer3, mixvpr,
-        # sum previous mixvpr, layer4 and again mixvpr and we sum also previous mixvpr?
-        # Could it be beneficial to extract holistic features at multiple stages? Computationally it is affordable since
-        # we have very limited batches for each epoch if we use gpm
+        if args.reweighting and args.template_injection:
+            template_descriptors = self.ti(images)
+            template_descriptors = self.model(template_descriptors)
+            descriptors = self.model(images)
+            descriptors = self.reweighting(descriptors, template_descriptors)
+        elif args.template_injection:
+            template_descriptors = self.ti(images)
+            descriptors = self.model(template_descriptors)
+        elif args.reweighting:
+            descriptors = self.model(images)
+            descriptors = self.reweighting(descriptors)
+        else:
+            descriptors = self.model(images)
+
         return descriptors
 
     def configure_optimizers(self):
@@ -160,7 +162,9 @@ class GeoModel(pl.LightningModule):
 
 def get_datasets_and_dataloaders(args):
     train_transform = tfm.Compose([
-        tfm.RandAugment(num_ops=3),
+        # tfm.RandAugment(num_ops=3),
+        tfm.GaussianBlur(10),   # High kernel size to make the blurring not too invalidating
+        tfm.ColorJitter(brightness=0.7),
         tfm.ToTensor(),
         tfm.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
@@ -193,6 +197,9 @@ if __name__ == '__main__':
 
     if args.template_injection:
         neptune_tags.append("template injection")
+
+    if args.reweighting:
+        neptune_tags.append("contextual reweighting")
 
     if args.feature_mixing:
         mix = MixVPR(in_channels=128, in_h=28, in_w=28,
