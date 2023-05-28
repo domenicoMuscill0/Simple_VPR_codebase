@@ -21,6 +21,8 @@ def parse_arguments():
                         help="learnign rate of the minimizer method")
     parser.add_argument("--optimizer", type=str, default="SGD",
                         help="optimizer you want to use")
+    parser.add_argument("--weight_decay", type=float, default=0,
+                        help="weight decay for AdamW and SGD")
 
     # Architecture parameters
     parser.add_argument("--descriptors_dim", type=int, default=512,

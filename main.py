@@ -63,11 +63,11 @@ class GeoModel(pl.LightningModule):
 
     def configure_optimizers(self):
         if args.optimizer == "SGD":
-            optimizers = torch.optim.SGD(self.parameters(), lr=args.learning_rate, weight_decay=0.001, momentum=0.9)
+            optimizers = torch.optim.SGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay, momentum=0.9)
         if args.optimizer == "AdamW":
-            optimizers = torch.optim.AdamW(self.parameters(), lr=args.learning_rate, weight_decay=0.001)
+            optimizers = torch.optim.AdamW(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
         if args.optimizer == "ASGD":
-            optimizers = torch.optim.ASGD(self.parameters(), lr=args.learning_rate, weight_decay=0.001)
+            optimizers = torch.optim.ASGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
         if args.optimizer == "Adam":
             optimizers = torch.optim.Adam(self.parameters(), lr=args.learning_rate)
         return optimizers
@@ -173,6 +173,7 @@ if __name__ == '__main__':
             "batch_size": args.batch_size,
             "lr": args.learning_rate,
             "optimizer": args.optimizer,
+            "weight_decay": args.weight_decay,
             "max_epochs": args.max_epochs,
         }
 
