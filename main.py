@@ -53,21 +53,21 @@ class GeoModel(pl.LightningModule):
             self.pbank = proxy_bank
         if args.feature_mixing:
             # It dodes not pass over the constructor
-            self.model = nn.Sequential(*self.model.children()[:-2], mix)
+            self.model = nn.Sequential(*list(self.model.children())[:-2], mix)
         if args.template_injection:
             self.ti = TemplateInjector(224)
             self.loss_fn = SelfSupervisedLoss(self.loss_fn)
             self.margin = 2
         if args.reweighting:
-            self.model = nn.Sequential(*self.model[-2])  # convolutional part
-            self.reweighting = ReweightVLAD(dim=49, alpha=75)
+            self.model = nn.Sequential(*list(self.model.children())[:-2])  # convolutional part
+            self.reweighting = ReweightVLAD(dim=512, alpha=75)
 
     def forward(self, images):
         if args.reweighting and args.template_injection:
             template_descriptors = self.ti(images)
             template_descriptors = self.model(template_descriptors)
             descriptors = self.model(images)
-            descriptors = self.reweighting(descriptors, template_descriptors)
+            descriptors = self.reweighting.forward(descriptors, template_descriptors)
         elif args.template_injection:
             template_descriptors = self.ti(images)
             descriptors = self.model(template_descriptors)
@@ -163,7 +163,7 @@ class GeoModel(pl.LightningModule):
 def get_datasets_and_dataloaders(args):
     train_transform = tfm.Compose([
         # tfm.RandAugment(num_ops=3),
-        tfm.GaussianBlur(10),   # High kernel size to make the blurring not too invalidating
+        tfm.GaussianBlur(11),   # High kernel size to make the blurring not too invalidating
         tfm.ColorJitter(brightness=0.7),
         tfm.ToTensor(),
         tfm.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),

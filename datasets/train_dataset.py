@@ -48,7 +48,7 @@ class TrainDataset(Dataset):
         place_id = self.places_ids[index]
         all_paths_from_place_id = self.dict_place_paths[place_id]
         chosen_paths = np.random.choice(all_paths_from_place_id, self.img_per_place)
-        images = [Image.open(path).convert('RGB') for path in chosen_paths]
+        images = [Image.open(path).convert('RGB').resize((200, 200)) for path in chosen_paths]
         images = [self.transform(img) for img in images]
         return torch.stack(images), torch.tensor(index).repeat(self.img_per_place)
 

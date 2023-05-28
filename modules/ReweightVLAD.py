@@ -9,10 +9,10 @@ class CRN(nn.Module):
         self.normalization = nn.LayerNorm([7, 7])
         self.upsample = nn.Upsample(size=(20, 20), mode='bilinear', align_corners=True)
         self.multi_scale_filters = [
-            nn.Conv2d(in_channels=512, out_channels=16, kernel_size=(8, 8), stride=2, padding=0),  # Templates
-            nn.Conv2d(in_channels=512, out_channels=32, kernel_size=(3, 3), stride=3, padding=1),  # Small
-            nn.Conv2d(in_channels=512, out_channels=32, kernel_size=(7, 7), stride=5, padding=9),  # Medium
-            nn.Conv2d(in_channels=512, out_channels=20, kernel_size=(9, 9), stride=2, padding=1)  # Large
+            nn.Conv2d(in_channels=512, out_channels=16, kernel_size=(8, 8), stride=2, padding=0).half().cuda(),  # Templates
+            nn.Conv2d(in_channels=512, out_channels=32, kernel_size=(3, 3), stride=3, padding=1).half().cuda(),  # Small
+            nn.Conv2d(in_channels=512, out_channels=32, kernel_size=(7, 7), stride=5, padding=9).half().cuda(),  # Medium
+            nn.Conv2d(in_channels=512, out_channels=20, kernel_size=(9, 9), stride=2, padding=1).half().cuda()  # Large
         ]
         self.accumulation = nn.Conv2d(in_channels=100, out_channels=1, kernel_size=(1, 1), stride=1, padding=0)
 
@@ -25,9 +25,10 @@ class CRN(nn.Module):
         xl = self.multi_scale_filters[3](x)
         filters = [xs, xm, xl]
         if t is not None:
-            t = self.multi_scale_filters[1](t)
+            t = self.upsample(t)
+            t = self.multi_scale_filters[0](t)
             filters.append(t)
-        x = torch.Stack(filters)  # Concatenation of 100 feature maps
+        x = torch.cat(filters, dim=1)  # Concatenation of 100 feature maps
         x = self.accumulation(x)  # Accumulation
         return x
 
@@ -71,7 +72,7 @@ class ReweightVLAD(nn.Module):
         N, C = x.shape[:2]
 
         # Generate the weights for context re-modulation
-        context_weights = self.crn(x, t)
+        context_weights = self.crn.forward(x, t).view(N, 1, -1)
 
         if self.normalize_input:
             x = F.normalize(x, p=2, dim=1)  # across descriptor dim
