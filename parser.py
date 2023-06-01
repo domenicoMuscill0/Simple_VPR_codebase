@@ -41,6 +41,12 @@ def parse_arguments():
     #                     help="whether to adopt Template Injector module")
     parser.add_argument('--template_injection', action='store_true')
     parser.add_argument('--no-template_injection', dest='template_injection', action='store_false')
+
+
+    # parser.add_argument("--manifold_loss", default=False, action=argparse.BooleanOptionalAction,
+    #                     help="whether to adopt Manifold Loss module")
+    parser.add_argument('--manifold_loss', action='store_true')
+    parser.add_argument('--no-manifold_loss', dest='manifold_loss', action='store_false')
     
     # Visualizations parameters
     parser.add_argument("--num_preds_to_save", type=int, default=3,

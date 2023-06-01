@@ -6,6 +6,7 @@ from torch.utils.data.dataloader import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import NeptuneLogger
 import parser
+from modules.manifold_loss import ManifoldLoss
 from modules.ReweightVLAD import ReweightVLAD
 from utils import compute_recalls
 from modules.TI import TemplateInjector
@@ -44,7 +45,8 @@ class GeoModel(pl.LightningModule):
         self.model.avgpool = GeM()
 
         # Set the loss function
-        self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
+        self.loss_fn = ManifoldLoss(K=10, l=args.descriptors_dim) if args.manifold_loss else \
+            losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
         self.save_hyperparameters(ignore=['proxy_head'])
 
         # Instantiate the Proxy Head and Proxy Bank
@@ -66,6 +68,7 @@ class GeoModel(pl.LightningModule):
         if args.reweighting and args.template_injection:
             template_descriptors = self.ti(images)
             template_descriptors = self.model(template_descriptors)
+            template_descriptors, _ = torch.max(template_descriptors, dim=1)
             descriptors = self.model(images)
             descriptors = self.reweighting.forward(descriptors, template_descriptors)
         elif args.template_injection:
