@@ -1,8 +1,8 @@
 import torch
 
-from ..distances import DotProductSimilarity
-from ..utils import common_functions as c_f
-from .base_metric_loss_function import BaseMetricLossFunction
+from pytorch_metric_learning.distances import DotProductSimilarity
+from pytorch_metric_learning.utils import common_functions as c_f
+from pytorch_metric_learning.losses.base_metric_loss_function import BaseMetricLossFunction
 from torch_scatter import scatter_add
 
 

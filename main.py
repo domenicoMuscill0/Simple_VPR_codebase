@@ -106,6 +106,8 @@ class GeoModel(pl.LightningModule):
             # loss = loss + torch.max(torch.zeros_like(template_distance), self.margin - template_distance).mean()
         #     loss = self.loss_function(descriptors, template_descriptors)
         # else:
+        if args.manifold_loss:
+          labels = None
         loss = self.loss_function(descriptors, labels)  # Call the loss_function we defined above
         # Feed forward the batch to the model
         if args.gpm:
