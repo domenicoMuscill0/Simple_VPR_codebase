@@ -13,6 +13,9 @@ class ManifoldProxyLoss(BaseMetricLossFunction):
 
     def compute_loss(self, embeddings, labels, indices_tuple, ref_emb, ref_labels):
         c_f.labels_not_supported(labels, ref_labels)
+        self.p = c_f.to_device(self.p, tensor=embeddings, device=embeddings.device)
+        ref_emb = c_f.to_device(ref_emb, tensor=embeddings)
+        indices_tuple = c_f.to_device(indices_tuple, tensor=embeddings)
 
         K = ref_emb.shape[0]
         proxies_by_embeddings = ref_emb[indices_tuple, :]
@@ -90,7 +93,7 @@ class ManifoldLoss(BaseMetricLossFunction):
         S_bar = D_inv_half * S.t()
         S_bar = S_bar.t() * D_inv_half
         S_bar.fill_diagonal_(0)
-        F = (1 - self.alpha) * torch.inverse(torch.eye(N + self.K, N + self.K) - self.alpha * S_bar)[:, -self.K:]
+        F = (1 - self.alpha) * torch.inverse(torch.eye(N + self.K, N + self.K, device=S_bar.device) - self.alpha * S_bar)[:, -self.K:]
 
         if 'intrinsic' in self.method:
             F = F[:N, :]
@@ -104,9 +107,10 @@ class ManifoldLoss(BaseMetricLossFunction):
             loss = torch.log(1 + torch.sum(loss, dim=1))
             loss = loss.mean()
 
-        self.proxies.requires_grad = False
+        old_proxies = self.proxies.detach()
+        old_embs = embeddings.detach()
         for _ in range(20):
-            proxies_loss = self.proxies_loss(embeddings, None, meta_classes, self.proxies, None)
+            proxies_loss = self.proxies_loss(old_embs, None, meta_classes, old_proxies, None)
             self.proxies_optimizer.zero_grad()
             proxies_loss.backward()
             self.proxies_optimizer.step()

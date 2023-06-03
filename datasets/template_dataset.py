@@ -1,15 +1,15 @@
 import os
 import random
 from glob import glob
-
 import cv2
 import torch
 from torchvision import models, transforms
 from PIL import Image
 import numpy as np
+from torchvision.models.segmentation import DeepLabV3_ResNet101_Weights
 
 # Load the pre-trained model
-model = models.segmentation.deeplabv3_resnet101(pretrained=True)
+model = models.segmentation.deeplabv3_resnet101(weights=DeepLabV3_ResNet101_Weights.DEFAULT)
 model.eval()
 
 # Define the image transforms
@@ -24,22 +24,18 @@ img_counters = [
     ('co', 0)
 ]
 
+IMAGES_PER_CITY = 30
 
-def is_blurry(image, threshold=50):
-    try:
-        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-    except cv2.error:
-        print(image)
-    gray = cv2.resize(gray, (64, 64))
-    sobel = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=5)
-    mean = np.mean(sobel)
-    print(mean)
-    # cv2.imshow('Grayscale', gray)
+
+def is_blurry(image, threshold=1000):
+    image = cv2.resize(image, (64, 64))
+    score = cv2.Laplacian(image, cv2.CV_64F).var()
+    # cv2.imshow('Image', image)
     # cv2.waitKey(0)
-    return abs(mean) < threshold
+    return abs(score) < threshold
 
 
-def save_templates(input_image: Image, output_path: str = "../data/templates"):
+def save_templates(input_image: Image, output_path: str = "../templates"):
     full_image = np.transpose(np.array(input_image), (2, 0, 1))
 
     # Make a prediction with the model
@@ -48,9 +44,9 @@ def save_templates(input_image: Image, output_path: str = "../data/templates"):
         output_predictions = output.softmax(dim=0).argmax(0)
 
     # Select only the masks of vehicles, people, and common urban objects
-    vehicles_mask = ((0 < output_predictions ) * (output_predictions <= 7)).byte().cpu().numpy().astype(np.uint8)
-    people_mask = ((7 < output_predictions) * (output_predictions <= 14)).byte().cpu().numpy().astype(np.uint8)
-    common_objects_mask = (output_predictions >= 15).byte().cpu().numpy().astype(np.uint8)
+    vehicles_mask = ((0 < output_predictions) * (output_predictions <= 7)).byte().cpu().numpy().astype(np.uint8)
+    common_objects_mask = ((7 < output_predictions) * (output_predictions <= 14)).byte().cpu().numpy().astype(np.uint8)
+    people_mask = (output_predictions >= 15).byte().cpu().numpy().astype(np.uint8)
     masks = [vehicles_mask, people_mask, common_objects_mask]
 
     for i, mask in enumerate(masks):
@@ -66,7 +62,6 @@ def save_templates(input_image: Image, output_path: str = "../data/templates"):
             np.where(image != 0)[2].min(), \
             np.where(image != 0)[2].max()
         image = image[:, top:bottom, left:right]
-
         image = np.transpose(image, (1, 2, 0))
 
         # Discard too blurry images using image energy
@@ -87,5 +82,5 @@ if __name__ == '__main__':
         if not os.path.isdir(city_path):
             continue
         # Save at most 10 images for each city in gsv_xc/train
-        for img_path in random.sample(glob(city_path + "/*.jpg"), 10):
+        for img_path in random.sample(glob(city_path + "/*.jpg"), IMAGES_PER_CITY):
             save_templates(Image.open(img_path).convert('RGB'))
