@@ -6,6 +6,7 @@ from torch.utils.data.dataloader import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import NeptuneLogger
 import parser
+from Simple_VPR_codebase.modules.p2s_grad_loss import P2SGradLoss
 from modules.manifold_loss import ManifoldLoss
 from modules.ReweightVLAD import ReweightVLAD
 from utils import compute_recalls
@@ -45,8 +46,14 @@ class GeoModel(pl.LightningModule):
         self.model.avgpool = GeM()
 
         # Set the loss function
-        self.loss_fn = ManifoldLoss(K=10, l=args.descriptors_dim) if args.manifold_loss else \
-            losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
+        if args.p2s_grad_loss and not args.manifold_loss:
+            self.loss_fn = P2SGradLoss(descriptors_dim=args.descriptors_dim, num_classes=23)
+        elif args.manifold_loss:
+            self.loss_fn = ManifoldLoss(l=args.descriptors_dim, K=50)
+        elif not args.p2s_grad_loss and not args.manifold_loss:
+            self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
+        else:
+            raise ValueError("There are supported only manifold loss and P2SGrad loss as arguments")
         self.save_hyperparameters(ignore=['proxy_head'])
 
         # Instantiate the Proxy Head and Proxy Bank
