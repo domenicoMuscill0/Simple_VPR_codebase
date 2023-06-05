@@ -6,7 +6,7 @@ from torch.utils.data.dataloader import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import NeptuneLogger
 import parser
-from Simple_VPR_codebase.modules.p2s_grad_loss import P2SGradLoss
+from modules.p2s_grad_loss import P2SGradLoss
 from modules.manifold_loss import ManifoldLoss
 from modules.ReweightVLAD import ReweightVLAD
 from utils import compute_recalls
