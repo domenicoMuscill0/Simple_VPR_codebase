@@ -56,7 +56,7 @@ class GeoModel(pl.LightningModule):
         self.model.fc = torch.nn.Linear(self.model.fc.in_features, descriptors_dim)
         self.model.avgpool = GeM()
         # Set the miner
-        self.miner=miners.MultiSimilarityMiner(miner_epsilon)
+        #self.miner=miners.MultiSimilarityMiner(miner_epsilon)
         # Set the loss function
         #self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
         self.loss_fn = losses.MultiSimilarityLoss(loss_alpha, loss_beta, loss_base)
@@ -72,7 +72,7 @@ class GeoModel(pl.LightningModule):
 
     #  The loss function call (this method will be called at each training iteration)
     def loss_function(self, descriptors, labels):
-        loss = self.loss_fn(descriptors, labels, self.miner(descriptors,labels))
+        loss = self.loss_fn(descriptors, labels)#, self.miner(descriptors,labels))
         return loss
 
     # This is the training step that's executed at each iteration
