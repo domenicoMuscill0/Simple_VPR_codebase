@@ -24,7 +24,7 @@ def parse_arguments():
     parser.add_argument("--scale", type=int, default=64,
                         help="MultiSimilarity loss scale")
 
-    parser.add_argument("--subcenter", type=int, default=3,
+    parser.add_argument("--subcenters", type=int, default=3,
                         help="SubCenterArcFace subcenters")
 
 
