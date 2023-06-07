@@ -88,11 +88,13 @@ class GeoModel(pl.LightningModule):
         descriptors = self(images)  # Here we are calling the method forward that we defined above
         #miner_output = self.miner_func(descriptors, labels)  # in your training for-loop
 
-        opt = self.optimizers()
-        opt.zero_grad()
+        NNopt, LossOpt = self.optimizers()
+        NNopt.zero_grad()
+        LossOpt.zero_grad()
         loss = self.loss_function(descriptors, labels)  # Call the loss_function we defined above
         self.manual_backward(loss)
-        opt.step()
+        NNopt.step()
+        LossOpt.step()
 
         self.log('loss', loss.item(), logger=True)
         return {'loss': loss}
