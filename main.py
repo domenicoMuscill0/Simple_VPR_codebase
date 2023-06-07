@@ -167,7 +167,7 @@ if __name__ == '__main__':
         neptune_logger = NeptuneLogger(
             api_key=args.neptune_api_key,  # replace with your own
             project="MLDL/geolocalization",  # format "workspace-name/project-name"
-            tags=["training", "resnet", "prove_loss", "gem", "MultiSimilarityLoss", "MultiSimilarityMiner"],  # optional
+            tags=["training", "resnet", "prove_loss", "gem", "MultiSimilarityLoss", "NoMiner"],  # optional
             log_model_checkpoints=False,
         )
         PARAMS = {
