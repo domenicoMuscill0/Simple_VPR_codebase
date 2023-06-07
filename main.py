@@ -72,7 +72,7 @@ class GeoModel(pl.LightningModule):
 
     #  The loss function call (this method will be called at each training iteration)
     def loss_function(self, descriptors, labels):
-        loss = self.loss_fn(descriptors, labels, self.miner(descriptors,labels))
+        loss = self.loss_fn(descriptors, labels)#, self.miner(descriptors,labels))
         return loss
 
     # This is the training step that's executed at each iteration
