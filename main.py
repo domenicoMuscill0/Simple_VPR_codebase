@@ -60,6 +60,7 @@ class GeoModel(pl.LightningModule):
         # Set the loss function
         #self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
         self.loss_fn = losses.ArcFaceLoss(num_classes, descriptors_dim, loss_margin, loss_scale)
+        self.automatic_optimization = False
         self.loss_optimizer = torch.optim.SGD(self.loss_fn.parameters(), lr=0.001)
         self.save_hyperparameters()
 
@@ -69,7 +70,7 @@ class GeoModel(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizers = torch.optim.SGD(self.parameters(), lr=0.001, weight_decay=0.001, momentum=0.9)
-        return (optimizers, self.loss_optimizer)
+        return optimizers, self.loss_optimizer
 
     #  The loss function call (this method will be called at each training iteration)
     def loss_function(self, descriptors, labels):
@@ -87,8 +88,11 @@ class GeoModel(pl.LightningModule):
         descriptors = self(images)  # Here we are calling the method forward that we defined above
         #miner_output = self.miner_func(descriptors, labels)  # in your training for-loop
 
+        opt = self.optimizers()
+        opt.zero_grad()
         loss = self.loss_function(descriptors, labels)  # Call the loss_function we defined above
-
+        self.manual_backward(loss)
+        opt.step()
 
         self.log('loss', loss.item(), logger=True)
         return {'loss': loss}
