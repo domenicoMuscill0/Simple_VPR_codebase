@@ -43,7 +43,7 @@ class GeM(nn.Module):
 
 
 class GeoModel(pl.LightningModule):
-    def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True, miner_epsilon=0.1, loss_margin=28.6, loss_scale=64, num_classes=10):
+    def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True, miner_epsilon=0.1, loss_margin=28.6, loss_scale=64, loss_subcenters=3, num_classes=10):
         super().__init__()
         self.val_dataset = val_dataset
         self.test_dataset = test_dataset
@@ -59,7 +59,7 @@ class GeoModel(pl.LightningModule):
         #self.miner=miners.MultiSimilarityMiner(miner_epsilon)
         # Set the loss function
         #self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
-        self.loss_fn = losses.ArcFaceLoss(num_classes, descriptors_dim, loss_margin, loss_scale)
+        self.loss_fn = losses.SubCenterArcFaceLoss(num_classes, descriptors_dim, loss_margin, loss_scale, loss_subcenters)
         self.automatic_optimization = False
         self.loss_optimizer = torch.optim.SGD(self.loss_fn.parameters(), lr=0.001)
         self.save_hyperparameters()
@@ -161,7 +161,7 @@ if __name__ == '__main__':
     train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args)
     kwargs = {"val_dataset": val_dataset, "test_dataset": test_dataset, "descriptors_dim": args.descriptors_dim,
               "num_preds_to_save": args.num_preds_to_save, "save_only_wrong_preds": args.save_only_wrong_preds,
-              "loss_margin":args.margin, "loss_scale":args.scale, "miner_epsilon":args.epsilon, "num_classes":len(train_dataset)}
+              "loss_margin":args.margin, "loss_scale":args.scale, "loss_subcenters":args.subcenters, "miner_epsilon":args.epsilon, "num_classes":len(train_dataset)}
     if args.load_checkpoint == "yes":
         model = GeoModel.load_from_checkpoint(args.checkpoint_path + "/" + os.listdir(args.checkpoint_path)[-1])
     elif args.load_checkpoint == "no":
@@ -175,7 +175,7 @@ if __name__ == '__main__':
         neptune_logger = NeptuneLogger(
             api_key=args.neptune_api_key,  # replace with your own
             project="MLDL/geolocalization",  # format "workspace-name/project-name"
-            tags=["training", "resnet", "prove_loss", "gem", "ArcFaceLoss"],  # optional
+            tags=["training", "resnet", "prove_loss", "gem", "SubCenterArcFaceLoss"],  # optional
             log_model_checkpoints=False,
         )
         PARAMS = {
@@ -184,6 +184,7 @@ if __name__ == '__main__':
             "max_epochs": args.max_epochs,
             "margin": args.margin,
             "scale": args.scale,
+            "subcenters": args.subcenters,
             "epsilon": args.epsilon,
             "test_set": args.test_path,
             "val_set": args.val_path
