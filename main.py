@@ -41,7 +41,7 @@ class GeM(nn.Module):
 
 
 class GeoModel(pl.LightningModule):
-    def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True, loss_margin=0.45, loss_scale=64, num_classes=10):
+    def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True, loss_margin=0.05, loss_scale=64, num_classes=10):
         super().__init__()
         self.val_dataset = val_dataset
         self.test_dataset = test_dataset
@@ -55,7 +55,7 @@ class GeoModel(pl.LightningModule):
         self.model.avgpool = GeM()
         # Set the loss function
         #self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
-        self.loss_fn = losses.CosFaceLoss(num_classes=num_classes,embedding_size=descriptors_dim, margin=loss_margin, scale=loss_scale)
+        self.loss_fn = losses.TripletMarginLoss(margin=loss_margin)
         self.save_hyperparameters()
 
     def forward(self, images):
@@ -161,7 +161,7 @@ if __name__ == '__main__':
         neptune_logger = NeptuneLogger(
             api_key=args.neptune_api_key,  # replace with your own
             project="MLDL/geolocalization",  # format "workspace-name/project-name"
-            tags=["training", "resnet", "prove_loss", "gem", "large-margin-cosine-loss"],  # optional
+            tags=["training", "resnet", "prove_loss", "gem", "tripletloss"],  # optional
             log_model_checkpoints=False,
         )
         PARAMS = {
@@ -169,7 +169,6 @@ if __name__ == '__main__':
             "lr": 0.001,
             "max_epochs": args.max_epochs,
             "margin": args.margin,
-            "scale": args.scale,
             "test_set": args.test_path,
             "val_set": args.val_path
         }
