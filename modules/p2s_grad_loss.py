@@ -42,7 +42,7 @@ class P2SGradLoss(BaseMetricLossFunction):
         c_f.ref_not_supported(embeddings, labels, ref_emb, ref_labels)
         c_f.indices_tuple_not_supported(indices_tuple)
 
-        self.weight.data = self.weight.data.renorm(2, 1, 1e-5).mul(1e5)
+        self.weight.data = self.weight.data / self.weight.data.norm(p=2, dim=0, keepdim=True)
         dtype = embeddings.dtype
         self.weight.data = c_f.to_device(
             self.weight.data, tensor=embeddings, dtype=dtype
