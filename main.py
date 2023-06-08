@@ -1,6 +1,5 @@
 import torchvision.models
 import pytorch_lightning as pl
-from pytorch_metric_learning.losses import SelfSupervisedLoss
 from torchvision import transforms as tfm
 from torch.utils.data.dataloader import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
@@ -47,7 +46,8 @@ class GeoModel(pl.LightningModule):
 
         # Set the loss function
         if args.p2s_grad_loss and not args.manifold_loss:
-            self.loss_fn = P2SGradLoss(descriptors_dim=args.descriptors_dim, num_classes=23)
+            self.loss_fn = P2SGradLoss(descriptors_dim=args.descriptors_dim,
+                num_classes=args.batch_size) # We use batch_size different places
         elif args.manifold_loss:
             self.loss_fn = ManifoldLoss(l=args.descriptors_dim, K=50)
         elif not args.p2s_grad_loss and not args.manifold_loss:
@@ -115,6 +115,8 @@ class GeoModel(pl.LightningModule):
         # else:
         if args.manifold_loss:
           labels = None
+        if args.p2s_grad_loss:
+          labels = labels.remainder(args.batch_size)
         loss = self.loss_function(descriptors, labels)  # Call the loss_function we defined above
         # Feed forward the batch to the model
         if args.gpm:
