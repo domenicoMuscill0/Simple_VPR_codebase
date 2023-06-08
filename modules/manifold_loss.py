@@ -133,10 +133,6 @@ class ManifoldLoss(BaseMetricLossFunction):
             }
         }
 
-    # @staticmethod
-    # def s(x, p):
-    #     return torch.sum(x / x.norm(p=2, dim=1, keepdim=True) * p / p.norm(p=2, dim=1, keepdim=True), dim=1)
-
     def update_p(self, old_embs, old_proxies, meta_classes):
         proxies_loss = self.proxies_loss(
             old_embs, None, meta_classes, old_proxies, None
@@ -158,21 +154,3 @@ class ManifoldLoss(BaseMetricLossFunction):
 
     def get_default_optimizer(self):
         return torch.optim.SGD([self.p], lr=0.01, momentum=0.9)
-
-    # def get_default_proxy_loss(self):
-    #     return ManifoldProxyLoss(self.p)
-
-
-# if __name__ == '__main__':
-#     loss_fn = ManifoldLoss(l=128, K=3)
-#     for _ in range(10, 20):
-#         data = torch.stack([
-#             torch.log(torch.arange(_, 128 + _)),
-#             torch.cos(torch.arange(_, 128 + _)),
-#             torch.exp(torch.linspace(0, 1 / _, 128)),
-#             torch.arange(_, 128 + _).pow(2),
-#             5 * torch.arange(_, 128 + _).pow(1),
-#             torch.arange(_, 128 + _).pow(3) - 3 * torch.arange(_, 128 + _).pow(1.5)
-#         ])
-#         loss = loss_fn(data, None, None, None, None)
-#         print(loss)
