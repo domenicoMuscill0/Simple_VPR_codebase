@@ -68,9 +68,6 @@ class ManifoldLoss(BaseMetricLossFunction):
             meta_classes = torch.cat((torch.arange(self.K), meta_classes))
             meta_classes = meta_classes[torch.randperm(N)]
 
-        if torch.all(self.proxies == 0):
-            self.proxies = self.get_default_proxies(embeddings, meta_classes)
-
         loss_int = torch.zeros(1)
         loss_int = c_f.to_device(loss_int, tensor=embeddings, dtype=embeddings.dtype)
         embs_and_proxies = torch.cat([embeddings, self.proxies], dim=0)
@@ -78,8 +75,7 @@ class ManifoldLoss(BaseMetricLossFunction):
         S = self.distance(embs_and_proxies, embs_and_proxies).clamp(0, np.inf)
         S = torch.exp(S / 0.5)
         Y = torch.eye(N + self.K, device=S.device, dtype=S.dtype)
-        with torch.no_grad():
-            S.fill_diagonal_(0)
+        S = S - S*Y
 
         D_inv_half = torch.pow(torch.sum(S, dim=1), -1 / 2).diag()
         S_bar = D_inv_half.mm(S)
@@ -88,7 +84,7 @@ class ManifoldLoss(BaseMetricLossFunction):
         dt = S_bar.dtype
         L = torch.inverse(
             Y.float() - self.alpha * S_bar.float()
-        )  # Added dtype cast to avoid errors
+        )  # Added float cast since inverse is not available for Half
         L = L.to(dt)
 
         F = (1 - self.alpha) * L
@@ -134,24 +130,5 @@ class ManifoldLoss(BaseMetricLossFunction):
             }
         }
 
-    def update_p(self, old_embs, old_proxies, meta_classes):
-        proxies_loss = self.proxies_loss(
-            old_embs, None, meta_classes, old_proxies, None
-        )
-        self.proxies_optimizer.zero_grad()
-        proxies_loss.backward()
-        self.proxies_optimizer.step()
-
     def get_default_distance(self):
         return CosineSimilarity()
-
-    def get_default_proxies(self, embs, meta_classes):
-        self.proxies = []
-        for k in range(self.K):
-            meta_class_k = embs[meta_classes == k, :]
-            meta_class_k_row_index = torch.randint(meta_class_k.shape[0], (1,))
-            self.proxies.append(meta_class_k[meta_class_k_row_index, :])
-        return torch.cat(self.proxies, dim=0).to(device=embs.device)
-
-    def get_default_optimizer(self):
-        return torch.optim.SGD([self.p], lr=0.01, momentum=0.9)
