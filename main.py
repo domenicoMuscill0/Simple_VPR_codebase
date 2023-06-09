@@ -18,7 +18,7 @@ from datasets.train_dataset import TrainDataset
 import os
 
 torch.cuda.empty_cache()
-
+torch.autograd.set_detect_anomaly(True)
 torch.set_float32_matmul_precision("highest")
 torch.cuda.set_per_process_memory_fraction(1 / 3, torch.cuda.current_device())  # Use only 1/3 of the available memory
 
