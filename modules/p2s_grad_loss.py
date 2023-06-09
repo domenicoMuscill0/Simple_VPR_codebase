@@ -44,9 +44,9 @@ class P2SGradLoss(BaseMetricLossFunction):
 
         self.weight = Parameter(self.weight / self.weight.data.norm(p=2, dim=0, keepdim=True))
         dtype = embeddings.dtype
-        self.weight.data = c_f.to_device(
+        self.weight = Parameter(c_f.to_device(
             self.weight.data, tensor=embeddings, dtype=dtype
-        )
+        ))
         labels = c_f.to_device(
             labels, tensor=embeddings, dtype=torch.long
         )
