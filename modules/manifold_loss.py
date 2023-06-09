@@ -78,7 +78,8 @@ class ManifoldLoss(BaseMetricLossFunction):
         S = self.distance(embs_and_proxies, embs_and_proxies).clamp(0, np.inf)
         S = torch.exp(S / 0.5)
         Y = torch.eye(N + self.K, device=S.device, dtype=S.dtype)
-        S.fill_diagonal_(0)
+        with torch.no_grad():
+            S.fill_diagonal_(0)
 
         D_inv_half = torch.pow(torch.sum(S, dim=1), -1 / 2).diag()
         S_bar = D_inv_half.mm(S)

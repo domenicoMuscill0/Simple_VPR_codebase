@@ -34,8 +34,7 @@ class P2SGradLoss(BaseMetricLossFunction):
         self.num_classes = num_classes
 
         self.weight = Parameter(torch.Tensor(descriptors_dim, num_classes))
-        with torch.no_grad():
-            self.weight.data.uniform_(-1, 1).renorm_(2, 1, 1e-5).mul_(1e5)
+        self.weight.data.uniform_(-1, 1).renorm_(2, 1, 1e-5).mul_(1e5)
 
         self.m_loss = nn.MSELoss()
 
@@ -43,11 +42,11 @@ class P2SGradLoss(BaseMetricLossFunction):
         c_f.ref_not_supported(embeddings, labels, ref_emb, ref_labels)
         c_f.indices_tuple_not_supported(indices_tuple)
 
-        self.weight = Parameter(self.weight / self.weight.data.norm(p=2, dim=0, keepdim=True))
+        self.weight.data = self.weight.data.renorm(2, 1, 1e-5).mul(1e5)
         dtype = embeddings.dtype
-        self.weight = Parameter(c_f.to_device(
+        self.weight.data = c_f.to_device(
             self.weight.data, tensor=embeddings, dtype=dtype
-        ))
+        )
         labels = c_f.to_device(
             labels, tensor=embeddings, dtype=torch.long
         )
