@@ -34,7 +34,8 @@ class P2SGradLoss(BaseMetricLossFunction):
         self.num_classes = num_classes
 
         self.weight = Parameter(torch.Tensor(descriptors_dim, num_classes))
-        self.weight.data.uniform_(-1, 1).renorm_(2, 1, 1e-5).mul_(1e5)
+        with torch.no_grad():
+            self.weight.data.uniform_(-1, 1).renorm_(2, 1, 1e-5).mul_(1e5)
 
         self.m_loss = nn.MSELoss()
 
