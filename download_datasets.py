@@ -4,6 +4,7 @@ URLS = {
     "sf_xs": "https://drive.google.com/file/d/1OLRHvJqcgruNuVwd_ZVdX7RGvT8DqQQF/view?usp=sharing",
     "gsv_xs": "https://drive.google.com/file/d/1dnOQhDcT82o_jWLlcO8lS6kaeVdFMzvr/view?usp=sharing"
 
+
 }
 #   "tokyo_xs": "https://drive.google.com/file/d/1nf1RAas99gNNvoWEJOD8A4knpSsOTr-D/view?usp=sharing",
 #     "sf_xs": "https://drive.google.com/file/d/1Rs9cPvGMs5RTuP7uPOaydE52c2dDeOxD/view?usp=sharing",
