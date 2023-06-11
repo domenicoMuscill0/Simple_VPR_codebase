@@ -59,7 +59,7 @@ class GeoModel(pl.LightningModule):
         #self.miner=miners.MultiSimilarityMiner(miner_epsilon)
         # Set the loss function
         #self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
-        self.loss_fn = losses.SubCenterArcFaceLoss(num_classes, descriptors_dim, loss_margin, loss_scale, loss_subcenters)
+        self.loss_fn = losses.SubCenterArcFaceLoss(num_classes = num_classes, embedding_size = descriptors_dim, margin=loss_margin, scale=loss_scale, sub_centers=loss_subcenters)
         self.automatic_optimization = False
         self.loss_optimizer = torch.optim.SGD(self.loss_fn.parameters(), lr=0.001)
         self.save_hyperparameters()
