@@ -8,6 +8,7 @@ from torchvision import transforms as tfm
 from pytorch_metric_learning import losses
 from torch.utils.data.dataloader import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_metric_learning.distances import CosineSimilarity
 
 from pytorch_lightning.loggers import NeptuneLogger
 
@@ -55,7 +56,7 @@ class GeoModel(pl.LightningModule):
         self.model.avgpool = GeM()
         # Set the loss function
         #self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
-        self.loss_fn = losses.TripletMarginLoss(margin=loss_margin)
+        self.loss_fn = losses.TripletMarginLoss(margin=loss_margin, distance=CosineSimilarity())
         self.save_hyperparameters()
 
     def forward(self, images):
