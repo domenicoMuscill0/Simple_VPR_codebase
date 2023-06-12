@@ -23,6 +23,8 @@ def parse_arguments():
 
     parser.add_argument("--scale", type=int, default=64,
                         help="Cos Face loss scale")
+    parser.add_argument("--miner_margin", type=float, default=0.2,
+                        help="Triplet miner margin")
 
     # Architecture parameters
     parser.add_argument("--descriptors_dim", type=int, default=512,
