@@ -151,7 +151,7 @@ if __name__ == '__main__':
     train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args)
     kwargs = {"val_dataset": val_dataset, "test_dataset": test_dataset, "descriptors_dim": args.descriptors_dim,
               "num_preds_to_save": args.num_preds_to_save, "save_only_wrong_preds": args.save_only_wrong_preds,
-              "loss_margin":args.margin, "miner_margin ":args.miner_margin,  "num_classes":len(train_dataset)}
+              "loss_margin":args.margin, "miner_margin":args.miner_margin,  "num_classes":len(train_dataset)}
     if args.load_checkpoint == "yes":
         model = GeoModel.load_from_checkpoint(args.checkpoint_path + "/" + os.listdir(args.checkpoint_path)[-1])
     elif args.load_checkpoint == "no":
