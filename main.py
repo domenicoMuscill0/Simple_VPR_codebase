@@ -55,7 +55,7 @@ class GeoModel(pl.LightningModule):
         self.model.fc = torch.nn.Linear(self.model.fc.in_features, descriptors_dim)
         self.model.avgpool = GeM()
         # Set the loss function
-        self.loss_fn = losses.TripletMarginLoss(margin=loss_margin)
+        self.loss_fn = losses.TripletMarginLoss(margin=loss_margin, distance=CosineSimilarity())
         #self.loss_fn = losses.ContrastiveLoss(pos_margin=1, neg_margin=0, distance=CosineSimilarity())
         self.save_hyperparameters()
 
