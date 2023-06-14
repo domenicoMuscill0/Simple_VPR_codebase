@@ -27,8 +27,6 @@ def parse_arguments():
     parser.add_argument("--base", type=float, default=0.5,
                         help="MultiSimilarity loss base")
 
-    parser.add_argument("--epsilon", type=float, default=0.1,
-                        help="MultiSimilarity miner epsilon")
 
     # Architecture parameters
     parser.add_argument("--descriptors_dim", type=int, default=512,

@@ -6,7 +6,6 @@ from torch import nn
 import torch.nn.functional as F
 from torchvision import transforms as tfm
 from pytorch_metric_learning import losses
-from pytorch_metric_learning import miners
 
 from torch.utils.data.dataloader import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
@@ -43,7 +42,7 @@ class GeM(nn.Module):
 
 
 class GeoModel(pl.LightningModule):
-    def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True, miner_epsilon=0.1, loss_alpha=2, loss_beta=50,loss_base=0.5, num_classes=10):
+    def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True, loss_alpha=2, loss_beta=50, loss_base=0.5):
         super().__init__()
         self.val_dataset = val_dataset
         self.test_dataset = test_dataset
@@ -55,8 +54,6 @@ class GeoModel(pl.LightningModule):
         # Change the output of the FC layer to the desired descriptors dimension
         self.model.fc = torch.nn.Linear(self.model.fc.in_features, descriptors_dim)
         self.model.avgpool = GeM()
-        # Set the miner
-        self.miner=miners.MultiSimilarityMiner(miner_epsilon)
         # Set the loss function
         #self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
         self.loss_fn = losses.MultiSimilarityLoss(loss_alpha, loss_beta, loss_base)
@@ -153,7 +150,7 @@ if __name__ == '__main__':
     train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args)
     kwargs = {"val_dataset": val_dataset, "test_dataset": test_dataset, "descriptors_dim": args.descriptors_dim,
               "num_preds_to_save": args.num_preds_to_save, "save_only_wrong_preds": args.save_only_wrong_preds,
-              "loss_alpha":args.alpha, "loss_beta":args.beta,"loss_base":args.base, "miner_epsilon":args.epsilon, "num_classes":len(train_dataset)}
+              "loss_alpha":args.alpha, "loss_beta":args.beta,"loss_base":args.base, "num_classes":len(train_dataset)}
     if args.load_checkpoint == "yes":
         model = GeoModel.load_from_checkpoint(args.checkpoint_path + "/" + os.listdir(args.checkpoint_path)[-1])
     elif args.load_checkpoint == "no":
@@ -177,7 +174,6 @@ if __name__ == '__main__':
             "alpha": args.alpha,
             "beta": args.beta,
             "base": args.base,
-            "epsilon": args.epsilon,
             "test_set": args.test_path,
             "val_set": args.val_path
         }
