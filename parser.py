@@ -21,8 +21,6 @@ def parse_arguments():
     parser.add_argument("--margin", type=float, default=0.05,
                         help="Triplet loss margin")
 
-    parser.add_argument("--scale", type=int, default=64,
-                        help="Cos Face loss scale")
     parser.add_argument("--miner_margin", type=float, default=0.2,
                         help="Triplet miner margin")
 

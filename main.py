@@ -43,7 +43,7 @@ class GeM(nn.Module):
 
 
 class GeoModel(pl.LightningModule):
-    def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True, loss_margin=0.05, num_classes=10, miner_margin=0.2):
+    def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True, loss_margin=0.05, miner_margin=0.2):
         super().__init__()
         self.val_dataset = val_dataset
         self.test_dataset = test_dataset
@@ -56,7 +56,7 @@ class GeoModel(pl.LightningModule):
         self.model.fc = torch.nn.Linear(self.model.fc.in_features, descriptors_dim)
         self.model.avgpool = GeM()
         # Set the miner
-        self.miner = miners.MultiSimilarityMiner(miner_margin, distance=CosineSimilarity())
+        self.miner = miners.TripletMarginMiner(miner_margin, distance=CosineSimilarity())
         # Set the loss function
         #self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
         self.loss_fn = losses.TripletMarginLoss(margin=loss_margin, distance=CosineSimilarity())
