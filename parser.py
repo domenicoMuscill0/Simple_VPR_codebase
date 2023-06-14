@@ -18,11 +18,10 @@ def parse_arguments():
     parser.add_argument("--load_checkpoint", type=str, default="no",
                          help="whether to load pytorch lightning checkpoints")
 
-    parser.add_argument("--margin", type=float, default=0.05,
-                        help="Triplet loss margin")
-
-    parser.add_argument("--scale", type=int, default=64,
-                        help="Cos Face loss scale")
+    parser.add_argument("--pos_margin", type=float, default=1,
+                        help="Contrastive loss positive margin")
+    parser.add_argument("--neg_margin", type=float, default=0,
+                        help="Contrastive loss negative margin")
 
     # Architecture parameters
     parser.add_argument("--descriptors_dim", type=int, default=512,
