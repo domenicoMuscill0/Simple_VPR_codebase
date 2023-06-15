@@ -62,14 +62,14 @@ class GeoModel(pl.LightningModule):
         return descriptors
 
     #COSINE_ANNEALING
-    def configure_optimizers(self):
-        if args.optimizer == "SGD_cosine":
-            optimizers = torch.optim.SGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay, momentum=0.9)
-        if args.optimizer == "ASGD_cosine":
-            optimizers = torch.optim.ASGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
-        return {"optimizer": optimizers, "lr_scheduler": {
-             "scheduler": torch.optim.lr_scheduler.CosineAnnealingLR(optimizers, 5, eta_min=args.learning_rate*0.01, last_epoch=- 1, verbose=True),
-             "frequency": 1}}
+    # def configure_optimizers(self):
+    #     if args.optimizer == "SGD_cosine":
+    #         optimizers = torch.optim.SGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay, momentum=0.9)
+    #     if args.optimizer == "ASGD_cosine":
+    #         optimizers = torch.optim.ASGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+    #     return {"optimizer": optimizers, "lr_scheduler": {
+    #          "scheduler": torch.optim.lr_scheduler.CosineAnnealingLR(optimizers, 5, eta_min=args.learning_rate*0.01, last_epoch=- 1, verbose=True),
+    #          "frequency": 1}}
 
 
     #REDUCE_LR_ON_PLATEAU
@@ -82,17 +82,17 @@ class GeoModel(pl.LightningModule):
     #         "scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(optimizers, mode='min', factor=0.1, verbose=True,
     #                                                                 patience=0), "monitor": 'R@1', "frequency": 1}}
 
-    #NO SCHEDULING
-    # def configure_optimizers(self):
-    #     if args.optimizer == "SGD":
-    #         optimizers = torch.optim.SGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay, momentum=0.9)
-    #     if args.optimizer == "AdamW":
-    #         optimizers = torch.optim.AdamW(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
-    #     if args.optimizer == "ASGD":
-    #         optimizers = torch.optim.ASGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
-    #     if args.optimizer == "Adam":
-    #         optimizers = torch.optim.Adam(self.parameters(), lr=args.learning_rate)
-    #     return optimizers
+    NO SCHEDULING
+    def configure_optimizers(self):
+        if args.optimizer == "SGD":
+            optimizers = torch.optim.SGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay, momentum=0.9)
+        if args.optimizer == "AdamW":
+            optimizers = torch.optim.AdamW(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+        if args.optimizer == "ASGD":
+            optimizers = torch.optim.ASGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+        if args.optimizer == "Adam":
+            optimizers = torch.optim.Adam(self.parameters(), lr=args.learning_rate)
+        return optimizers
 
     #  The loss function call (this method will be called at each training iteration)
     def loss_function(self, descriptors, labels):
