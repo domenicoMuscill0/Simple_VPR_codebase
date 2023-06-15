@@ -82,7 +82,7 @@ class GeoModel(pl.LightningModule):
     #         "scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(optimizers, mode='min', factor=0.1, verbose=True,
     #                                                                 patience=0), "monitor": 'R@1', "frequency": 1}}
 
-    NO SCHEDULING
+    #NO SCHEDULING
     def configure_optimizers(self):
         if args.optimizer == "SGD":
             optimizers = torch.optim.SGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay, momentum=0.9)
