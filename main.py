@@ -61,10 +61,11 @@ class GeoModel(pl.LightningModule):
         descriptors = self.model(images)
         return descriptors
 
+    #COSINE_ANNEALING
     # def configure_optimizers(self):
-    #     if args.optimizer == "SGD":
+    #     if args.optimizer == "SGD_cosine":
     #         optimizers = torch.optim.SGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay, momentum=0.9)
-    #     if args.optimizer == "ASGD":
+    #     if args.optimizer == "ASGD_cosine":
     #         optimizers = torch.optim.ASGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
     #     return {"optimizer": optimizers, "lr_scheduler": {
     #          "scheduler": torch.optim.lr_scheduler.CosineAnnealingLR(optimizers, 5, eta_min=args.learning_rate*0.01, last_epoch=- 1, verbose=True),
@@ -73,9 +74,9 @@ class GeoModel(pl.LightningModule):
 
     #REDUCE_LR_ON_PLATEAU
     def configure_optimizers(self):
-        if args.optimizer == "SGD":
+        if args.optimizer == "SGD_plateau":
             optimizers = torch.optim.SGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay, momentum=0.9)
-        if args.optimizer == "ASGD":
+        if args.optimizer == "ASGD_plateau":
             optimizers = torch.optim.ASGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
         return {"optimizer": optimizers, "lr_scheduler": {
             "scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(optimizers, mode='min', factor=0.1, verbose=True,
