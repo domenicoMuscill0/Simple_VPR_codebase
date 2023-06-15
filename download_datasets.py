@@ -15,11 +15,19 @@
 # }
 
 #QUESTI SONO DA CFD-CWE
+# URLS = {
+#     "tokyo_xs": "https://drive.google.com/file/d/10DrpzZ7tl7OStgFDiTJasDbnGv_dxdh_/view?usp=sharing",
+#     "sf_xs": "https://drive.google.com/file/d/1usonhb5qdLsfCKX2zh1H-sfLoiBk_ioV/view?usp=sharing",
+#     "gsv_xs": "https://drive.google.com/file/d/1OSJOGt62aYimScMcoZl_De3TdJhi04OT/view?usp=sharing"
+# }
+
+#QUESTI SONO DA MOR
 URLS = {
-    "tokyo_xs": "https://drive.google.com/file/d/10DrpzZ7tl7OStgFDiTJasDbnGv_dxdh_/view?usp=sharing",
-    "sf_xs": "https://drive.google.com/file/d/1usonhb5qdLsfCKX2zh1H-sfLoiBk_ioV/view?usp=sharing",
-    "gsv_xs": "https://drive.google.com/file/d/1OSJOGt62aYimScMcoZl_De3TdJhi04OT/view?usp=sharing"
+    "tokyo_xs": "https://drive.google.com/file/d/1y8JSyPY1B7uWlVUs_SFC2ZtbSYL9EQ3N/view?usp=sharing",
+    "sf_xs": "https://drive.google.com/file/d/1PSjwD7k-BjO_L12MbYCenoDZjaulJZqz/view?usp=sharing",
+    "gsv_xs": "https://drive.google.com/file/d/1BRdPUXB63j3hmwxpS5IYFCisQYm0FkXn/view?usp=sharing"
 }
+
 
 import os
 import gdown
