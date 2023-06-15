@@ -7,10 +7,18 @@
 #     "gsv_xs": "https://drive.google.com/file/d/1q7usSe9_5xV5zTfN-1In4DlmF5ReyU_A/view?usp=share_link"
 # }
 
+#QUESTI SONO DA GMAIL PRINCIPALE
+# URLS = {
+#     "tokyo_xs": "https://drive.google.com/file/d/1LpxOxwghR5Gfmx5qRCB3rbbWp9OannJi/view?usp=sharing",
+#     "sf_xs": "https://drive.google.com/file/d/1dQt1iIKQAwUcUBkuBXCVkW4epMWbWR_i/view?usp=sharing",
+#     "gsv_xs": "https://drive.google.com/file/d/16iaZMbuWOwmhGDUvNkEYdD4Ste-aFJVC/view?usp=sharing"
+# }
+
+#QUESTI SONO DA CFD-CWE
 URLS = {
-    "tokyo_xs": "https://drive.google.com/file/d/1LpxOxwghR5Gfmx5qRCB3rbbWp9OannJi/view?usp=sharing",
-    "sf_xs": "https://drive.google.com/file/d/1dQt1iIKQAwUcUBkuBXCVkW4epMWbWR_i/view?usp=sharing",
-    "gsv_xs": "https://drive.google.com/file/d/16iaZMbuWOwmhGDUvNkEYdD4Ste-aFJVC/view?usp=sharing"
+    "tokyo_xs": "https://drive.google.com/file/d/10DrpzZ7tl7OStgFDiTJasDbnGv_dxdh_/view?usp=sharing",
+    "sf_xs": "https://drive.google.com/file/d/1usonhb5qdLsfCKX2zh1H-sfLoiBk_ioV/view?usp=sharing",
+    "gsv_xs": "https://drive.google.com/file/d/1OSJOGt62aYimScMcoZl_De3TdJhi04OT/view?usp=sharing"
 }
 
 import os
