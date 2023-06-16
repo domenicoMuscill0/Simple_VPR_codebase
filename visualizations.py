@@ -63,7 +63,6 @@ def build_prediction_image(images_paths, preds_correct=None, logger: NeptuneLogg
         pad_height = (H - image.shape[0] + 1) // 2
         image = np.pad(image, [[pad_height, pad_height], [pad_width, pad_width], [0, 0]], constant_values=1)[:H, :W]
         concat_image[:, i * (W + SPACE): i * (W + SPACE) + W] = image
-
     final_image = Image.fromarray((concat_image * 255).astype(np.uint8))
     return final_image
 

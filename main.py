@@ -5,6 +5,8 @@ from pytorch_metric_learning import losses
 from pytorch_metric_learning import miners
 from torch.utils.data.dataloader import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
+import matplotlib.pyplot as plt
+import utils
 from pytorch_metric_learning.distances import CosineSimilarity
 from pytorch_lightning.loggers import NeptuneLogger
 import parser
@@ -23,6 +25,22 @@ import os
 torch.cuda.empty_cache()
 torch.set_float32_matmul_precision("highest")
 torch.cuda.set_per_process_memory_fraction(1 / 3, torch.cuda.current_device())  # Use only 1/3 of the available memory
+
+class GeM(nn.Module):
+    def __init__(self, p=3, eps=1e-6):
+        super(GeM, self).__init__()
+        self.p = nn.Parameter(torch.ones(1) * p)
+        self.eps = eps
+
+    def forward(self, x):
+        return self.gem(x, p=self.p, eps=self.eps)
+
+    def gem(self, x, p=3, eps=1e-6):
+        return F.avg_pool2d(x.clamp(min=eps).pow(p), (x.size(-2), x.size(-1))).pow(1. / p)
+
+    def __repr__(self):
+        return self.__class__.__name__ + '(' + 'p=' + '{:.4f}'.format(self.p.data.tolist()[0]) + ', ' + 'eps=' + str(
+            self.eps) + ')'
 
 s = 32
 dev = torch.device('cuda')
@@ -110,8 +128,37 @@ class GeoModel(pl.LightningModule):
 
         return descriptors
 
+    #COSINE_ANNEALING
+    # def configure_optimizers(self):
+    #     if args.optimizer == "SGD_cosine":
+    #         optimizers = torch.optim.SGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay, momentum=0.9)
+    #     if args.optimizer == "ASGD_cosine":
+    #         optimizers = torch.optim.ASGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+    #     return {"optimizer": optimizers, "lr_scheduler": {
+    #          "scheduler": torch.optim.lr_scheduler.CosineAnnealingLR(optimizers, 5, eta_min=args.learning_rate*0.01, last_epoch=- 1, verbose=True),
+    #          "frequency": 1}}
+
+
+    #REDUCE_LR_ON_PLATEAU
+    # def configure_optimizers(self):
+    #     if args.optimizer == "SGD_plateau":
+    #         optimizers = torch.optim.SGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay, momentum=0.9)
+    #     if args.optimizer == "ASGD_plateau":
+    #         optimizers = torch.optim.ASGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+    #     return {"optimizer": optimizers, "lr_scheduler": {
+    #         "scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(optimizers, mode='min', factor=0.1, verbose=True,
+    #                                                                 patience=0), "monitor": 'R@1', "frequency": 1}}
+
+    #NO SCHEDULING
     def configure_optimizers(self):
-        optimizers = torch.optim.SGD(self.parameters(), lr=0.001, weight_decay=0.001, momentum=0.9)
+        if args.optimizer == "SGD":
+            optimizers = torch.optim.SGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay, momentum=0.9)
+        if args.optimizer == "AdamW":
+            optimizers = torch.optim.AdamW(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+        if args.optimizer == "ASGD":
+            optimizers = torch.optim.ASGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+        if args.optimizer == "Adam":
+            optimizers = torch.optim.Adam(self.parameters(), lr=args.learning_rate)
         return optimizers, self.loss_optimizer
 
     #  The loss function call (this method will be called at each training iteration)
@@ -204,6 +251,7 @@ class GeoModel(pl.LightningModule):
         self.log('R@5', recalls[1], prog_bar=False, logger=True)
 
 
+
 def get_datasets_and_dataloaders(args):
     train_transform = tfm.Compose([
         # tfm.RandAugment(num_ops=3),
@@ -240,6 +288,9 @@ if __name__ == '__main__':
     neptune_tags = []
 
     train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args)
+    kwargs = {"val_dataset": val_dataset, "test_dataset": test_dataset, "descriptors_dim": args.descriptors_dim,
+              "num_preds_to_save": args.num_preds_to_save, "save_only_wrong_preds": args.save_only_wrong_preds}
+    if args.load_checkpoint == "yes":
     
 	if args.arcface_loss:
 		kwargs.update({"arcface_loss_margin":args.arcface_loss_margin, 
@@ -302,8 +353,33 @@ if __name__ == '__main__':
     kwargs.update({"val_dataset": val_dataset, "test_dataset": test_dataset})
     if args.load_checkpoint:
         model = GeoModel.load_from_checkpoint(args.checkpoint_path + "/" + os.listdir(args.checkpoint_path)[-1])
-    else:
+    elif args.load_checkpoint == "no":
         model = GeoModel(**kwargs)
+    else:
+        print("Error, no valid load checkpoint string")
+        os.exit()
+
+
+    if args.neptune_api_key:
+        neptune_logger = NeptuneLogger(
+            api_key=args.neptune_api_key,  # replace with your own
+            project="MLDL/geolocalization",  # format "workspace-name/project-name"
+            tags=["training", "resnet", "prove_loss", "gem", "contrastive-loss"],  # optional
+            log_model_checkpoints=False,
+        )
+        PARAMS = {
+            "batch_size": args.batch_size,
+            "lr": args.learning_rate,
+            "optimizer": args.optimizer,
+            "weight_decay": args.weight_decay,
+            "max_epochs": args.max_epochs,
+        }
+
+        neptune_logger.log_hyperparams(params=PARAMS)
+
+    # Model params saving using Pytorch Lightning. Save the best 3 models according to Recall@1
+
+
 
     checkpoint_cb = ModelCheckpoint(
         monitor='R@1',
@@ -314,6 +390,7 @@ if __name__ == '__main__':
         mode='max'
     )
 
+    # Instantiate a trainer
     if args.neptune_api_key:
         neptune_logger = NeptuneLogger(
             api_key=args.neptune_api_key,  # replace with your own
@@ -333,7 +410,7 @@ if __name__ == '__main__':
             precision=16,  # we use half precision to reduce  memory usage
             max_epochs=args.max_epochs,
             check_val_every_n_epoch=1,  # run validation every epoch
-            callbacks=[checkpoint_cb],
+            callbacks=[checkpoint_cb],  # we only run the checkpointing callback (you can add more)
             reload_dataloaders_every_n_epochs=1,  # we reload the dataset to shuffle the order
             log_every_n_steps=20,
             logger=neptune_logger
