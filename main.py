@@ -33,8 +33,8 @@ class GeoModel(pl.LightningModule):
     def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True,
                  proxy_bank: ProxyBank = None, proxy_head: ProxyHead = None,
                  contrastive_pos_margin=1, contrastive_neg_margin=0,
-                 arcface_loss_margin=28.6, arcface_loss_scale=64, arcface_num_classes=10,
-				         arcface_subcenters=1, multisim_alpha=2, multisim_beta=50, multisim_base=0.5,
+                 arcface_loss_margin=28.6, arcface_loss_scale=64, arcface_num_classes=10, arcface_subcenters=1, 
+                 multisim_alpha=2, multisim_beta=50, multisim_base=0.5, multisim_miner_epsilon=0.1
                  triplet_margin=0.05, triplet_miner_margin=0.2,
                  mix: MixVPR = None):
         super().__init__()
@@ -66,6 +66,10 @@ class GeoModel(pl.LightningModule):
 													   subcenters=arcface_subcenters)
 			      self.automatic_optimization = False
 			      self.loss_optimizer = torch.optim.SGD(self.loss_fn.parameters(), lr=0.001)
+        elif args.multisim_loss:
+            self.loss_fn = losses.MultisimilarityLoss(alpha=multisim_alpha, beta=multisim_beta, base=multisim_base)
+            if args.miner:
+                self.miner = miners.MultisimilarityMiner(epsilon=multisim_miner_epsilon)
         elif args.triplet_loss:
             self.loss_fn = losses.TripletMarginLoss(margin=triplet_margin, distance=CosineSimilarity())
             if args.miner:
@@ -246,12 +250,17 @@ if __name__ == '__main__':
 					   "arcface_subcenters":args.arcface_subcenters})
 		neptune_tags.append("arcface_loss")
     elif args.multisim_loss:
-        kwargs.update({"multisim_alpha":args.multisim_alpha, "multisim_beta":args.multisim_beta, 
+        kwargs.update({"multisim_alpha":args.multisim_alpha, 
+                       "multisim_beta":args.multisim_beta, 
                        "multisim_base":args.multisim_base})
         PARAMS.update({"multisim_alpha": args.multisim_alpha,
                        "multisim_beta": args.multisim_beta,
                        "multisim_base": args.multisim_base})
         neptune_tags.append("multisim_loss")
+        if args.miner:
+            kwargs.update({"multisim_miner_epsilon":args.multisim_miner_epsilon})
+            PARAMS.update({"multisim_miner_epsilon":args.multisim_miner_epsilon})
+            neptune_tags.append("multisim_miner")
     elif args.triplet_loss:
         kwargs.update({"triplet_margin":args.triplet_margin})
         PARAMS.update({"triplet_margin":args.triplet_margin})
