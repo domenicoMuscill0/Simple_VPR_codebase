@@ -16,13 +16,10 @@ def parse_arguments():
     parser.add_argument("--num_workers", type=int, default=8,
                         help="number of processes to use for data loading / preprocessing")
 
-    parser.add_argument("--pos_margin", type=float,
-                        help="Contrastive loss positive margin")
-    parser.add_argument("--neg_margin", type=float,
-                        help="Contrastive loss negative margin")
 
     parser.add_argument("--load_checkpoint", default=False, #action=argparse.BooleanOptionalAction,
                         help="whether to load pytorch lightning checkpoints")
+
 
     # Architecture parameters
     parser.add_argument("--descriptors_dim", type=int, default=512,
@@ -57,6 +54,23 @@ def parse_arguments():
     #                     help="whether to adopt P2SGrad Loss module")
     parser.add_argument('--p2s_grad_loss', action='store_true')
     parser.add_argument('--no-p2s_grad_loss', dest='p2s_grad_loss', action='store_false')
+	
+	# parser.add_argument("--arcface_loss", default=False, action=argparse.BooleanOptionalAction,
+    #                     help="whether to adopt Arcface Loss")
+    parser.add_argument('--arcface_loss', action='store_true')
+    parser.add_argument('--no-arcface_loss', dest='arcface_loss', action='store_false')
+    
+    # Losses params
+    parser.add_argument("--arcface_margin", type=float, default=28.6,
+                        help="Arcface loss margin")
+
+    parser.add_argument("--arcface_scale", type=int, default=64,
+                        help="Arcface loss scale")
+
+    parser.add_argument("--contrastive_pos_margin", type=float,
+                        help="Contrastive loss positive margin")
+    parser.add_argument("--contrastive_neg_margin", type=float,
+                        help="Contrastive loss negative margin")
     
     # Visualizations parameters
     parser.add_argument("--num_preds_to_save", type=int, default=3,

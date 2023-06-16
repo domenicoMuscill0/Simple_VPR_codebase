@@ -1,6 +1,9 @@
 import torchvision.models
 import pytorch_lightning as pl
 from torchvision import transforms as tfm
+from pytorch_metric_learning import losses
+from pytorch_metric_learning import miners
+
 from torch.utils.data.dataloader import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_metric_learning.distances import CosineSimilarity
@@ -30,7 +33,8 @@ torch.nn.functional.conv2d(torch.zeros(s, s, s, s, device=dev), torch.zeros(s, s
 class GeoModel(pl.LightningModule):
     def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True,
                  proxy_bank: ProxyBank = None, proxy_head: ProxyHead = None,
-                 loss_pos_margin=1, loss_neg_margin=0,
+                 contrastive_loss_pos_margin=1, contrastive_loss_neg_margin=0,
+                 arcface_loss_margin=28.6, arcface_loss_scale=64, arcface_num_classes=10,
                  mix: MixVPR = None):
 
         super().__init__()
@@ -47,14 +51,20 @@ class GeoModel(pl.LightningModule):
         self.model.fc = torch.nn.Linear(self.model.fc.in_features, descriptors_dim)
         self.model.avgpool = GeM()
 
+
         # Set the loss function
 
-        self.loss_fn = losses.ContrastiveLoss(pos_margin=loss_pos_margin, neg_margin=loss_neg_margin, distance=CosineSimilarity())
+        self.loss_fn = losses.ContrastiveLoss(pos_margin=contrastive_loss_pos_margin, 
+                                              neg_margin=contrastive_loss_neg_margin, distance=CosineSimilarity())
         if args.p2s_grad_loss and not args.manifold_loss:
             self.loss_fn = P2SGradLoss(descriptors_dim=args.descriptors_dim,
                 num_classes=args.batch_size) # We use batch_size different places
         elif args.manifold_loss:
             self.loss_fn = ManifoldLoss(l=args.descriptors_dim, K=50)
+        elif args.arcface:
+			self.loss_fn = losses.ArcFaceLoss(arcface_num_classes, descriptors_dim, arcface_loss_margin, arcface_loss_scale)
+			self.automatic_optimization = False
+			self.loss_optimizer = torch.optim.SGD(self.loss_fn.parameters(), lr=0.001)
         self.save_hyperparameters(ignore=['proxy_head'])
 
         # Instantiate the Proxy Head and Proxy Bank
@@ -71,7 +81,6 @@ class GeoModel(pl.LightningModule):
         if args.reweighting:
             self.model = nn.Sequential(*list(self.model.children())[:-2])  # convolutional part
             self.reweighting = ReweightVLAD(dim=512, alpha=75)
-
 
     def forward(self, images):
         if args.reweighting and args.template_injection:
@@ -93,11 +102,11 @@ class GeoModel(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizers = torch.optim.SGD(self.parameters(), lr=0.001, weight_decay=0.001, momentum=0.9)
-        return optimizers
+        return optimizers, self.loss_optimizer
 
     #  The loss function call (this method will be called at each training iteration)
     def loss_function(self, descriptors, labels):
-        loss = self.loss_fn(descriptors, labels)
+        loss = self.loss_fn(descriptors, labels)#, self.miner(descriptors,labels))
         return loss
 
     # This is the training step that's executed at each iteration
@@ -112,9 +121,7 @@ class GeoModel(pl.LightningModule):
             template_descriptors = self.ti(images)
             template_descriptors = self(template_descriptors)
             template_distance = torch.norm(descriptors - template_descriptors, p=2, dim=1)
-            # loss = loss + torch.max(torch.zeros_like(template_distance), self.margin - template_distance).mean()
-        #     loss = self.loss_function(descriptors, template_descriptors)
-        # else:
+    
         if args.manifold_loss:
             labels = None
         if args.p2s_grad_loss:
@@ -138,6 +145,14 @@ class GeoModel(pl.LightningModule):
                 DataLoader(dataset=self.trainer.train_dataloader.dataset,
                            batch_sampler=HardSampler(indexes_list=ids),
                            num_workers=args.num_workers)
+		if args.arcface_loss:
+			NNopt, LossOpt = self.optimizers()
+			NNopt.zero_grad()
+			LossOpt.zero_grad()
+			self.manual_backward(loss)
+        	NNopt.step()
+        	LossOpt.step()
+
 
         self.log('loss', loss.item(), logger=True)
         return {'loss': loss}
@@ -206,10 +221,13 @@ if __name__ == '__main__':
 
     train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args)
     
-    if args.pos_margin:
-        kwargs.update({"loss_pos_margin":args.pos_margin})
+    if args.contrastive_pos_margin:
+        kwargs.update({"loss_pos_margin":args.contrastive_pos_margin})
     if args.neg_margin:
-        kwargs.update({"loss_neg_margin":args.neg_margin})
+        kwargs.update({"loss_neg_margin":args.contrastive_neg_margin})
+	if args.arcface_loss:
+		kwargs.update({"arcface_loss_margin":args.arcface_loss_margin, "arcface_loss_scale":args.arcface_loss_scale})
+		neptune_tags.append("arcface_loss")
       
     if args.gpm:
         proxy_head = ProxyHead(out_dim=128, in_dim=args.descriptors_dim)
@@ -255,6 +273,7 @@ if __name__ == '__main__':
             project="MLDL/geolocalization",  # format "workspace-name/project-name"
             tags=neptune_tags,
             log_model_checkpoints=True
+
         )
         PARAMS = {
             "batch_size": args.batch_size,
