@@ -35,8 +35,8 @@ class GeoModel(pl.LightningModule):
                  proxy_bank: ProxyBank = None, proxy_head: ProxyHead = None,
                  contrastive_loss_pos_margin=1, contrastive_loss_neg_margin=0,
                  arcface_loss_margin=28.6, arcface_loss_scale=64, arcface_num_classes=10,
+				 arcface_subcenters=1,
                  mix: MixVPR = None):
-
         super().__init__()
         self.val_dataset = val_dataset
         self.test_dataset = test_dataset
@@ -62,7 +62,9 @@ class GeoModel(pl.LightningModule):
         elif args.manifold_loss:
             self.loss_fn = ManifoldLoss(l=args.descriptors_dim, K=50)
         elif args.arcface:
-			self.loss_fn = losses.ArcFaceLoss(arcface_num_classes, descriptors_dim, arcface_loss_margin, arcface_loss_scale)
+			self.loss_fn = losses.SubCenterArcFaceLoss(arcface_num_classes, descriptors_dim, 
+													   arcface_loss_margin, arcface_loss_scale,
+													   subcenters=arcface_subcenters)
 			self.automatic_optimization = False
 			self.loss_optimizer = torch.optim.SGD(self.loss_fn.parameters(), lr=0.001)
         self.save_hyperparameters(ignore=['proxy_head'])
@@ -226,7 +228,9 @@ if __name__ == '__main__':
     if args.neg_margin:
         kwargs.update({"loss_neg_margin":args.contrastive_neg_margin})
 	if args.arcface_loss:
-		kwargs.update({"arcface_loss_margin":args.arcface_loss_margin, "arcface_loss_scale":args.arcface_loss_scale})
+		kwargs.update({"arcface_loss_margin":args.arcface_loss_margin, 
+					   "arcface_loss_scale":args.arcface_loss_scale,
+					   "arcface_subcenters":args.arcface_subcenters})
 		neptune_tags.append("arcface_loss")
       
     if args.gpm:
@@ -273,12 +277,12 @@ if __name__ == '__main__':
             project="MLDL/geolocalization",  # format "workspace-name/project-name"
             tags=neptune_tags,
             log_model_checkpoints=True
-
         )
         PARAMS = {
             "batch_size": args.batch_size,
             "lr": 0.001,
             "max_epochs": args.max_epochs,
+            "subcenters": args.arcface_subcenters,
             "pos_margin": args.pos_margin,
             "neg_margin": args.neg_margin,
             "test_set": args.test_path,

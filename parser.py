@@ -16,10 +16,8 @@ def parse_arguments():
     parser.add_argument("--num_workers", type=int, default=8,
                         help="number of processes to use for data loading / preprocessing")
 
-
     parser.add_argument("--load_checkpoint", default=False, #action=argparse.BooleanOptionalAction,
                         help="whether to load pytorch lightning checkpoints")
-
 
     # Architecture parameters
     parser.add_argument("--descriptors_dim", type=int, default=512,
@@ -66,6 +64,9 @@ def parse_arguments():
 
     parser.add_argument("--arcface_scale", type=int, default=64,
                         help="Arcface loss scale")
+	
+	parser.add_argument("--arcface_subcenters", type=int, default=1,
+                        help="SubCenterArcFace subcenters")
 
     parser.add_argument("--contrastive_pos_margin", type=float,
                         help="Contrastive loss positive margin")
