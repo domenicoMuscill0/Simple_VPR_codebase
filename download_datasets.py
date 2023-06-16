@@ -1,9 +1,9 @@
 
 URLS = {
-    "tokyo_xs": "https://drive.google.com/file/d/1kHl0xPVWJTNIdJXLOrm3xUS-SL8MvGKO/view?usp=sharing",
-    "sf_xs": "https://drive.google.com/file/d/1OLRHvJqcgruNuVwd_ZVdX7RGvT8DqQQF/view?usp=sharing",
-    "gsv_xs": "https://drive.google.com/file/d/1dnOQhDcT82o_jWLlcO8lS6kaeVdFMzvr/view?usp=sharing"
 
+    "tokyo_xs": "https://drive.google.com/file/d/1bY-2wV4HmfUQC_O_CWlDHYL_bOOifTMZ/view?usp=share_link",
+    "sf_xs": "https://drive.google.com/file/d/1sNtAgMYjHZYRHyAdBB4XuyEKB7G452OJ/view?usp=share_link",
+    "gsv_xs": "https://drive.google.com/file/d/1bJC4jWuFNio397PfVrQO53ET3zVvI08u/view?usp=share_link"
 
 }
 #   "tokyo_xs": "https://drive.google.com/file/d/1nf1RAas99gNNvoWEJOD8A4knpSsOTr-D/view?usp=sharing",
