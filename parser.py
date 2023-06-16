@@ -19,6 +19,7 @@ def parse_arguments():
     parser.add_argument("--load_checkpoint", default=False, #action=argparse.BooleanOptionalAction,
                         help="whether to load pytorch lightning checkpoints")
 
+
     # Architecture parameters
     parser.add_argument("--descriptors_dim", type=int, default=512,
                         help="dimensionality of the output descriptors")
@@ -68,10 +69,19 @@ def parse_arguments():
 	parser.add_argument("--arcface_subcenters", type=int, default=1,
                         help="SubCenterArcFace subcenters")
 
-    parser.add_argument("--contrastive_pos_margin", type=float,
+    parser.add_argument("--contrastive_pos_margin", type=float, default=1,
                         help="Contrastive loss positive margin")
-    parser.add_argument("--contrastive_neg_margin", type=float,
+    parser.add_argument("--contrastive_neg_margin", type=float, default=0,
                         help="Contrastive loss negative margin")
+    
+    parser.add_argument("--multisim_alpha", type=int, default=2,
+                        help="MultiSimilarity loss alpha")
+
+    parser.add_argument("--multisim_beta", type=int, default=50,
+                        help="MultiSimilarity loss beta")
+
+    parser.add_argument("--multisim_base", type=float, default=0.5,
+                        help="MultiSimilarity loss base")
     
     # Visualizations parameters
     parser.add_argument("--num_preds_to_save", type=int, default=3,

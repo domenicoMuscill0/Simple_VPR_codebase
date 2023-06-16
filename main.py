@@ -2,7 +2,6 @@ import torchvision.models
 import pytorch_lightning as pl
 from torchvision import transforms as tfm
 from pytorch_metric_learning import losses
-from pytorch_metric_learning import miners
 
 from torch.utils.data.dataloader import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
@@ -33,9 +32,9 @@ torch.nn.functional.conv2d(torch.zeros(s, s, s, s, device=dev), torch.zeros(s, s
 class GeoModel(pl.LightningModule):
     def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True,
                  proxy_bank: ProxyBank = None, proxy_head: ProxyHead = None,
-                 contrastive_loss_pos_margin=1, contrastive_loss_neg_margin=0,
+                 contrastive_pos_margin=1, contrastive_neg_margin=0,
                  arcface_loss_margin=28.6, arcface_loss_scale=64, arcface_num_classes=10,
-				 arcface_subcenters=1,
+				 arcface_subcenters=1, multisim_alpha=2, multisim_beta=50, multisim_base=0.5
                  mix: MixVPR = None):
         super().__init__()
         self.val_dataset = val_dataset
@@ -51,11 +50,10 @@ class GeoModel(pl.LightningModule):
         self.model.fc = torch.nn.Linear(self.model.fc.in_features, descriptors_dim)
         self.model.avgpool = GeM()
 
-
         # Set the loss function
 
-        self.loss_fn = losses.ContrastiveLoss(pos_margin=contrastive_loss_pos_margin, 
-                                              neg_margin=contrastive_loss_neg_margin, distance=CosineSimilarity())
+        self.loss_fn = losses.ContrastiveLoss(pos_margin=contrastive_pos_margin, 
+                                              neg_margin=contrastive_neg_margin, distance=CosineSimilarity())
         if args.p2s_grad_loss and not args.manifold_loss:
             self.loss_fn = P2SGradLoss(descriptors_dim=args.descriptors_dim,
                 num_classes=args.batch_size) # We use batch_size different places
@@ -219,19 +217,37 @@ if __name__ == '__main__':
     args = parser.parse_arguments()
     kwargs = {"descriptors_dim": args.descriptors_dim, "num_preds_to_save": args.num_preds_to_save,
               "save_only_wrong_preds": args.save_only_wrong_preds}
+    PARAMS = {
+            "batch_size": args.batch_size,
+            "lr": 0.001,
+            "max_epochs": args.max_epochs,
+            "test_set": args.test_path,
+            "val_set": args.val_path
+    }
     neptune_tags = []
 
     train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args)
     
-    if args.contrastive_pos_margin:
-        kwargs.update({"loss_pos_margin":args.contrastive_pos_margin})
-    if args.neg_margin:
-        kwargs.update({"loss_neg_margin":args.contrastive_neg_margin})
 	if args.arcface_loss:
 		kwargs.update({"arcface_loss_margin":args.arcface_loss_margin, 
 					   "arcface_loss_scale":args.arcface_loss_scale,
 					   "arcface_subcenters":args.arcface_subcenters})
+        PARAMS.update({"arcface_loss_margin":args.arcface_loss_margin, 
+					   "arcface_loss_scale":args.arcface_loss_scale,
+					   "arcface_subcenters":args.arcface_subcenters})
 		neptune_tags.append("arcface_loss")
+    elif args.multisim_loss:
+        kwargs.update({"multisim_alpha":args.multisim_alpha, "multisim_beta":args.multisim_beta, 
+                       "multisim_base":args.multisim_base})
+        PARAMS.update({"multisim_alpha": args.multisim_alpha,
+                       "multisim_beta": args.multisim_beta,
+                       "multisim_base": args.multisim_base})
+        neptune_tags.append("multisim_loss")
+    else:
+        kwargs.update({"contrastive_pos_margin":args.contrastive_pos_margin, 
+                       "contrastive_neg_margin":args.contrastive_neg_margin})
+        PARAMS.update({"contrastive_pos_margin": args.contrastive_pos_margin,
+                       "contrastive_neg_margin": args.contrastive_neg_margin})
       
     if args.gpm:
         proxy_head = ProxyHead(out_dim=128, in_dim=args.descriptors_dim)
@@ -278,16 +294,7 @@ if __name__ == '__main__':
             tags=neptune_tags,
             log_model_checkpoints=True
         )
-        PARAMS = {
-            "batch_size": args.batch_size,
-            "lr": 0.001,
-            "max_epochs": args.max_epochs,
-            "subcenters": args.arcface_subcenters,
-            "pos_margin": args.pos_margin,
-            "neg_margin": args.neg_margin,
-            "test_set": args.test_path,
-            "val_set": args.val_path
-        }
+        
 
         neptune_logger.log_hyperparams(params=PARAMS)
         
