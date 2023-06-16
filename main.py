@@ -26,22 +26,6 @@ torch.cuda.empty_cache()
 torch.set_float32_matmul_precision("highest")
 torch.cuda.set_per_process_memory_fraction(1 / 3, torch.cuda.current_device())  # Use only 1/3 of the available memory
 
-class GeM(nn.Module):
-    def __init__(self, p=3, eps=1e-6):
-        super(GeM, self).__init__()
-        self.p = nn.Parameter(torch.ones(1) * p)
-        self.eps = eps
-
-    def forward(self, x):
-        return self.gem(x, p=self.p, eps=self.eps)
-
-    def gem(self, x, p=3, eps=1e-6):
-        return F.avg_pool2d(x.clamp(min=eps).pow(p), (x.size(-2), x.size(-1))).pow(1. / p)
-
-    def __repr__(self):
-        return self.__class__.__name__ + '(' + 'p=' + '{:.4f}'.format(self.p.data.tolist()[0]) + ', ' + 'eps=' + str(
-            self.eps) + ')'
-
 s = 32
 dev = torch.device('cuda')
 torch.nn.functional.conv2d(torch.zeros(s, s, s, s, device=dev), torch.zeros(s, s, s, s, device=dev))
@@ -288,30 +272,26 @@ if __name__ == '__main__':
     neptune_tags = []
 
     train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args)
-    kwargs = {"val_dataset": val_dataset, "test_dataset": test_dataset, "descriptors_dim": args.descriptors_dim,
-              "num_preds_to_save": args.num_preds_to_save, "save_only_wrong_preds": args.save_only_wrong_preds}
-    if args.load_checkpoint == "yes":
-    
-	if args.arcface_loss:
-		kwargs.update({"arcface_loss_margin":args.arcface_loss_margin, 
+if args.arcface_loss:
+    kwargs.update({"arcface_loss_margin":args.arcface_loss_margin, 
+		       "arcface_loss_scale":args.arcface_loss_scale,
+		       "arcface_subcenters":args.arcface_subcenters})
+	PARAMS.update({"arcface_loss_margin":args.arcface_loss_margin, 
 					   "arcface_loss_scale":args.arcface_loss_scale,
 					   "arcface_subcenters":args.arcface_subcenters})
-    PARAMS.update({"arcface_loss_margin":args.arcface_loss_margin, 
-					   "arcface_loss_scale":args.arcface_loss_scale,
-					   "arcface_subcenters":args.arcface_subcenters})
-		neptune_tags.append("arcface_loss")
-    elif args.multisim_loss:
-        kwargs.update({"multisim_alpha":args.multisim_alpha, 
+	neptune_tags.append("arcface_loss")
+elif args.multisim_loss:
+    kwargs.update({"multisim_alpha":args.multisim_alpha, 
                        "multisim_beta":args.multisim_beta, 
                        "multisim_base":args.multisim_base})
-        PARAMS.update({"multisim_alpha": args.multisim_alpha,
+    PARAMS.update({"multisim_alpha": args.multisim_alpha,
                        "multisim_beta": args.multisim_beta,
                        "multisim_base": args.multisim_base})
-        neptune_tags.append("multisim_loss")
-        if args.miner:
-            kwargs.update({"multisim_miner_epsilon":args.multisim_miner_epsilon})
-            PARAMS.update({"multisim_miner_epsilon":args.multisim_miner_epsilon})
-            neptune_tags.append("multisim_miner")
+    neptune_tags.append("multisim_loss")
+    if args.miner:
+        kwargs.update({"multisim_miner_epsilon":args.multisim_miner_epsilon})
+        PARAMS.update({"multisim_miner_epsilon":args.multisim_miner_epsilon})
+        neptune_tags.append("multisim_miner")
     elif args.triplet_loss:
         kwargs.update({"triplet_margin":args.triplet_margin})
         PARAMS.update({"triplet_margin":args.triplet_margin})
@@ -430,6 +410,6 @@ if __name__ == '__main__':
             log_every_n_steps=20
         )
 
-    # trainer.validate(model=model, dataloaders=val_loader)
+    trainer.validate(model=model, dataloaders=val_loader)
     trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
     trainer.test(model=model, dataloaders=test_loader)
