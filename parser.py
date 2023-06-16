@@ -15,28 +15,69 @@ def parse_arguments():
                         help="stop when training reaches max_epochs")
     parser.add_argument("--num_workers", type=int, default=8,
                         help="number of processes to use for data loading / preprocessing")
-    parser.add_argument("--load_checkpoint", type=str, default="no",
-                         help="whether to load pytorch lightning checkpoints")
 
-    parser.add_argument("--margin", type=float, default=28.6,
-                        help="subcenter arcface loss margin")
-
-    parser.add_argument("--scale", type=int, default=64,
-                        help="subcenter arcface loss scale")
-
-    parser.add_argument("--subcenters", type=int, default=3,
-                        help="SubCenterArcFace subcenters")
-
-
+    parser.add_argument("--load_checkpoint", default=False, #action=argparse.BooleanOptionalAction,
+                        help="whether to load pytorch lightning checkpoints")
 
     # Architecture parameters
     parser.add_argument("--descriptors_dim", type=int, default=512,
                         help="dimensionality of the output descriptors")
+    # parser.add_argument("--feature_mixing", default=False, action=argparse.BooleanOptionalAction,
+    #                     help="whether to adopt Feature Mixing module")
+    parser.add_argument('--feature_mixing', action='store_true')
+    parser.add_argument('--no-feature_mixing', dest='feature_mixing', action='store_false')
+
+    # parser.add_argument("--gpm", default=False, action=argparse.BooleanOptionalAction,
+    #                     help="whether to adopt Global Proxy Mining module")
+    # Solo per Kaggle. Se usi Colab usa l'altra versione
+    parser.add_argument('--gpm', action='store_true')
+    parser.add_argument('--no-gpm', dest='gpm', action='store_false')
+
+    # parser.add_argument("--reweighting", default=False, action=argparse.BooleanOptionalAction,
+    #                     help="whether to adopt Contextual Feature Reweighting module")
+    parser.add_argument('--reweighting', action='store_true')
+    parser.add_argument('--no-reweighting', dest='reweighting', action='store_false')
+
+    # parser.add_argument("--template_injection", default=False, action=argparse.BooleanOptionalAction,
+    #                     help="whether to adopt Template Injector module")
+    parser.add_argument('--template_injection', action='store_true')
+    parser.add_argument('--no-template_injection', dest='template_injection', action='store_false')
+
+    # parser.add_argument("--manifold_loss", default=False, action=argparse.BooleanOptionalAction,
+    #                     help="whether to adopt Manifold Loss module")
+    parser.add_argument('--manifold_loss', action='store_true')
+    parser.add_argument('--no-manifold_loss', dest='manifold_loss', action='store_false')
+
+    # parser.add_argument("--p2s_grad_loss", default=False, action=argparse.BooleanOptionalAction,
+    #                     help="whether to adopt P2SGrad Loss module")
+    parser.add_argument('--p2s_grad_loss', action='store_true')
+    parser.add_argument('--no-p2s_grad_loss', dest='p2s_grad_loss', action='store_false')
+	
+	# parser.add_argument("--arcface_loss", default=False, action=argparse.BooleanOptionalAction,
+    #                     help="whether to adopt Arcface Loss")
+    parser.add_argument('--arcface_loss', action='store_true')
+    parser.add_argument('--no-arcface_loss', dest='arcface_loss', action='store_false')
+    
+    # Losses params
+    parser.add_argument("--arcface_margin", type=float, default=28.6,
+                        help="Arcface loss margin")
+
+    parser.add_argument("--arcface_scale", type=int, default=64,
+                        help="Arcface loss scale")
+	
+	parser.add_argument("--arcface_subcenters", type=int, default=1,
+                        help="SubCenterArcFace subcenters")
+
+    parser.add_argument("--contrastive_pos_margin", type=float,
+                        help="Contrastive loss positive margin")
+    parser.add_argument("--contrastive_neg_margin", type=float,
+                        help="Contrastive loss negative margin")
     
     # Visualizations parameters
-    parser.add_argument("--num_preds_to_save", type=int, default=0,
-                        help="At the end of training, save N preds for each query. "
-                        "Try with a small number like 3")
+    parser.add_argument("--num_preds_to_save", type=int, default=3,
+                        help="At the end of training, save N preds for each query. ")
+    parser.add_argument("--num_queries_to_save", type=int, default=10,
+                        help="At the end of training, save N queries. ")
     parser.add_argument("--save_only_wrong_preds", action="store_true",
                         help="When saving preds (if num_preds_to_save != 0) save only "
                         "preds for difficult queries, i.e. with uncorrect first prediction")
