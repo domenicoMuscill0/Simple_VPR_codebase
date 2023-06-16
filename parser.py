@@ -94,6 +94,8 @@ def parse_arguments():
                         help="MultiSimilarity loss beta")
     parser.add_argument("--multisim_base", type=float, default=0.5,
                         help="MultiSimilarity loss base")
+    parser.add_argument("--multisim_miner_epsilon", type=float, default=0.1,
+                        help="MultiSimilarity miner epsilon")
     
     parser.add_argument("--triplet_margin", type=float, default=0.05,
                         help="Triplet margin")
