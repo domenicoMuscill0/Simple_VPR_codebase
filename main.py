@@ -2,7 +2,7 @@ import torchvision.models
 import pytorch_lightning as pl
 from torchvision import transforms as tfm
 from pytorch_metric_learning import losses
-
+from pytorch_metric_learning import miners
 from torch.utils.data.dataloader import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_metric_learning.distances import CosineSimilarity
@@ -35,7 +35,7 @@ class GeoModel(pl.LightningModule):
                  contrastive_pos_margin=1, contrastive_neg_margin=0,
                  arcface_loss_margin=28.6, arcface_loss_scale=64, arcface_num_classes=10,
 				         arcface_subcenters=1, multisim_alpha=2, multisim_beta=50, multisim_base=0.5,
-                 triplet_margin=0.05,
+                 triplet_margin=0.05, triplet_miner_margin=0.2,
                  mix: MixVPR = None):
         super().__init__()
         self.val_dataset = val_dataset
@@ -68,6 +68,9 @@ class GeoModel(pl.LightningModule):
 			      self.loss_optimizer = torch.optim.SGD(self.loss_fn.parameters(), lr=0.001)
         elif args.triplet_loss:
             self.loss_fn = losses.TripletMarginLoss(margin=triplet_margin, distance=CosineSimilarity())
+            if args.miner:
+                self.miner = miners.TripletMarginMiner(margin=triplet_miner_margin, distance=CosineSimilarity())
+            
         self.save_hyperparameters(ignore=['proxy_head'])
 
         # Instantiate the Proxy Head and Proxy Bank
@@ -109,7 +112,10 @@ class GeoModel(pl.LightningModule):
 
     #  The loss function call (this method will be called at each training iteration)
     def loss_function(self, descriptors, labels):
-        loss = self.loss_fn(descriptors, labels)#, self.miner(descriptors,labels))
+        if args.triplet_miner:
+            loss = self.loss_fn(descriptors, labels, self.miner(descriptors,labels))
+        else:
+            loss = self.loss_fn(descriptors, labels)#, self.miner(descriptors,labels))
         return loss
 
     # This is the training step that's executed at each iteration
@@ -235,7 +241,7 @@ if __name__ == '__main__':
 		kwargs.update({"arcface_loss_margin":args.arcface_loss_margin, 
 					   "arcface_loss_scale":args.arcface_loss_scale,
 					   "arcface_subcenters":args.arcface_subcenters})
-        PARAMS.update({"arcface_loss_margin":args.arcface_loss_margin, 
+    PARAMS.update({"arcface_loss_margin":args.arcface_loss_margin, 
 					   "arcface_loss_scale":args.arcface_loss_scale,
 					   "arcface_subcenters":args.arcface_subcenters})
 		neptune_tags.append("arcface_loss")
@@ -248,11 +254,18 @@ if __name__ == '__main__':
         neptune_tags.append("multisim_loss")
     elif args.triplet_loss:
         kwargs.update({"triplet_margin":args.triplet_margin})
+        PARAMS.update({"triplet_margin":args.triplet_margin})
+        neptune_tags.append("triplet_loss")
+        if args.miner:
+            kwargs.update({"triplet_miner_margin":args.triplet_miner_margin})
+            PARAMS.update({"triplet_miner_margin":args.triplet_miner_margin})
+            neptune_tags.append("triplet_miner")
     else:
         kwargs.update({"contrastive_pos_margin":args.contrastive_pos_margin, 
                        "contrastive_neg_margin":args.contrastive_neg_margin})
         PARAMS.update({"contrastive_pos_margin": args.contrastive_pos_margin,
                        "contrastive_neg_margin": args.contrastive_neg_margin})
+        neptune_tags.append("contrastive_loss")
       
     if args.gpm:
         proxy_head = ProxyHead(out_dim=128, in_dim=args.descriptors_dim)

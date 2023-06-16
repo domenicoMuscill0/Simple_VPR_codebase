@@ -19,7 +19,6 @@ def parse_arguments():
     parser.add_argument("--load_checkpoint", default=False, #action=argparse.BooleanOptionalAction,
                         help="whether to load pytorch lightning checkpoints")
 
-
     # Architecture parameters
     parser.add_argument("--descriptors_dim", type=int, default=512,
                         help="dimensionality of the output descriptors")
@@ -54,10 +53,25 @@ def parse_arguments():
     parser.add_argument('--p2s_grad_loss', action='store_true')
     parser.add_argument('--no-p2s_grad_loss', dest='p2s_grad_loss', action='store_false')
 	
-	# parser.add_argument("--arcface_loss", default=False, action=argparse.BooleanOptionalAction,
+	  # parser.add_argument("--arcface_loss", default=False, action=argparse.BooleanOptionalAction,
     #                     help="whether to adopt Arcface Loss")
     parser.add_argument('--arcface_loss', action='store_true')
     parser.add_argument('--no-arcface_loss', dest='arcface_loss', action='store_false')
+    
+    # parser.add_argument("--multisim_loss", default=False, action=argparse.BooleanOptionalAction,
+    #                     help="whether to adopt Multisimilarity Loss")
+    parser.add_argument('--multisim_loss', action='store_true')
+    parser.add_argument('--no-multisim_loss', dest='multisim_loss', action='store_false')
+    
+    # parser.add_argument("--triplet_loss", default=False, action=argparse.BooleanOptionalAction,
+    #                     help="whether to adopt Triplet Loss")
+    parser.add_argument('--triplet_loss', action='store_true')
+    parser.add_argument('--no-triplet_loss', dest='triplet_loss', action='store_false')
+    
+    # parser.add_argument("--miner", default=False, action=argparse.BooleanOptionalAction,
+    #                     help="whether to adopt Miner")
+    parser.add_argument('--miner', action='store_true')
+    parser.add_argument('--no-miner', dest='miner', action='store_false')
     
     # Losses params
     parser.add_argument("--arcface_margin", type=float, default=28.6,
@@ -66,7 +80,7 @@ def parse_arguments():
     parser.add_argument("--arcface_scale", type=int, default=64,
                         help="Arcface loss scale")
 	
-	parser.add_argument("--arcface_subcenters", type=int, default=1,
+	  parser.add_argument("--arcface_subcenters", type=int, default=1,
                         help="SubCenterArcFace subcenters")
 
     parser.add_argument("--contrastive_pos_margin", type=float, default=1,
@@ -76,12 +90,15 @@ def parse_arguments():
     
     parser.add_argument("--multisim_alpha", type=int, default=2,
                         help="MultiSimilarity loss alpha")
-
     parser.add_argument("--multisim_beta", type=int, default=50,
                         help="MultiSimilarity loss beta")
-
     parser.add_argument("--multisim_base", type=float, default=0.5,
                         help="MultiSimilarity loss base")
+    
+    parser.add_argument("--triplet_margin", type=float, default=0.05,
+                        help="Triplet margin")
+    parser.add_argument("--triplet_miner_margin", type=float, default=0.2,
+                        help="Triplet miner margin")
     
     # Visualizations parameters
     parser.add_argument("--num_preds_to_save", type=int, default=3,
