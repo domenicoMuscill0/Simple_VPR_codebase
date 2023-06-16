@@ -3,6 +3,7 @@ import pytorch_lightning as pl
 from torchvision import transforms as tfm
 from torch.utils.data.dataloader import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_metric_learning.distances import CosineSimilarity
 from pytorch_lightning.loggers import NeptuneLogger
 import parser
 from modules.p2s_grad_loss import P2SGradLoss
@@ -29,7 +30,9 @@ torch.nn.functional.conv2d(torch.zeros(s, s, s, s, device=dev), torch.zeros(s, s
 class GeoModel(pl.LightningModule):
     def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True,
                  proxy_bank: ProxyBank = None, proxy_head: ProxyHead = None,
+                 loss_pos_margin=1, loss_neg_margin=0,
                  mix: MixVPR = None):
+
         super().__init__()
         self.val_dataset = val_dataset
         self.test_dataset = test_dataset
@@ -37,6 +40,7 @@ class GeoModel(pl.LightningModule):
         self.save_only_wrong_preds = save_only_wrong_preds
 
         # Use a pretrained model
+        # provare transfer learning freezando la resnet coi pesi scaricati
         self.model = torchvision.models.resnet18(weights=torchvision.models.ResNet18_Weights.DEFAULT)
 
         # Change the output of the FC layer to the desired descriptors dimension
@@ -44,15 +48,13 @@ class GeoModel(pl.LightningModule):
         self.model.avgpool = GeM()
 
         # Set the loss function
+
+        self.loss_fn = losses.ContrastiveLoss(pos_margin=loss_pos_margin, neg_margin=loss_neg_margin, distance=CosineSimilarity())
         if args.p2s_grad_loss and not args.manifold_loss:
             self.loss_fn = P2SGradLoss(descriptors_dim=args.descriptors_dim,
                 num_classes=args.batch_size) # We use batch_size different places
         elif args.manifold_loss:
             self.loss_fn = ManifoldLoss(l=args.descriptors_dim, K=50)
-        elif not args.p2s_grad_loss and not args.manifold_loss:
-            self.loss_fn = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
-        else:
-            raise ValueError("There are supported only manifold loss and P2SGrad loss as arguments")
         self.save_hyperparameters(ignore=['proxy_head'])
 
         # Instantiate the Proxy Head and Proxy Bank
@@ -69,6 +71,7 @@ class GeoModel(pl.LightningModule):
         if args.reweighting:
             self.model = nn.Sequential(*list(self.model.children())[:-2])  # convolutional part
             self.reweighting = ReweightVLAD(dim=512, alpha=75)
+
 
     def forward(self, images):
         if args.reweighting and args.template_injection:
@@ -113,9 +116,9 @@ class GeoModel(pl.LightningModule):
         #     loss = self.loss_function(descriptors, template_descriptors)
         # else:
         if args.manifold_loss:
-          labels = None
+            labels = None
         if args.p2s_grad_loss:
-          labels = labels.remainder(args.batch_size)
+            labels = labels.remainder(args.batch_size)
         loss = self.loss_function(descriptors, labels)  # Call the loss_function we defined above
         # Feed forward the batch to the model
         if args.gpm:
@@ -202,6 +205,12 @@ if __name__ == '__main__':
     neptune_tags = []
 
     train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args)
+    
+    if args.pos_margin:
+        kwargs.update({"loss_pos_margin":args.pos_margin})
+    if args.neg_margin:
+        kwargs.update({"loss_neg_margin":args.neg_margin})
+      
     if args.gpm:
         proxy_head = ProxyHead(out_dim=128, in_dim=args.descriptors_dim)
         proxy_bank = ProxyBank(k=4)
@@ -251,12 +260,17 @@ if __name__ == '__main__':
             "batch_size": args.batch_size,
             "lr": 0.001,
             "max_epochs": args.max_epochs,
+            "pos_margin": args.pos_margin,
+            "neg_margin": args.neg_margin,
+            "test_set": args.test_path,
+            "val_set": args.val_path
         }
 
         neptune_logger.log_hyperparams(params=PARAMS)
+        
         trainer = pl.Trainer(
             accelerator='gpu',
-            devices=[0],
+            devices=-1,
             default_root_dir=args.log_path,  # Tensorflow can be used to viz
             num_sanity_val_steps=0,  # runs a validation step before stating training
             precision=16,  # we use half precision to reduce  memory usage
@@ -270,7 +284,7 @@ if __name__ == '__main__':
     else:
         trainer = pl.Trainer(
             accelerator='gpu',
-            devices=[0],
+            devices=-1,
             default_root_dir=args.log_path,  # Tensorflow can be used to viz
             num_sanity_val_steps=0,  # runs a validation step before stating training
             precision=16,  # we use half precision to reduce  memory usage
