@@ -1,12 +1,11 @@
 import os
 import cv2
 import numpy as np
+from neptune.types import File
+from pytorch_lightning.loggers import NeptuneLogger
 from tqdm import tqdm
 from skimage.transform import rescale
 from PIL import Image, ImageDraw, ImageFont
-
-#from Simple_VPR_codebase import parser
-#from Simple_VPR_codebase.main import GeoModel, get_datasets_and_dataloaders
 
 # Height and width of a single image
 H = 512
@@ -35,7 +34,7 @@ def draw(img, c=(0, 255, 0), thickness=20):
     return cv2.line(img, (p[3, 0], p[3, 1]), (p[0, 0], p[0, 1]), c, thickness=thickness * 2)
 
 
-def build_prediction_image(images_paths, preds_correct=None):
+def build_prediction_image(images_paths, preds_correct=None, logger: NeptuneLogger = None):
     """Build a row of images, where the first is the query and the rest are predictions.
     For each image, if is_correct then draw a green/red box.
     """
@@ -43,14 +42,22 @@ def build_prediction_image(images_paths, preds_correct=None):
     labels = ["Query"] + [f"Pr{i} - {is_correct}" for i, is_correct in enumerate(preds_correct[1:])]
     num_images = len(images_paths)
     images = [np.array(Image.open(path)) for path in images_paths]
+
+    # Draw the red or green border over the image
     for img, correct in zip(images, preds_correct):
         if correct is None:
             continue
         color = (0, 255, 0) if correct else (255, 0, 0)
         draw(img, color)
+
+    # Create the array of 'num_images' predicted images and white spaces between them
     concat_image = np.ones([H, (num_images * W) + ((num_images - 1) * SPACE), 3])
+
+    # Rescale the images
     rescaleds = [rescale(i, [min(H / i.shape[0], W / i.shape[1]), min(H / i.shape[0], W / i.shape[1]), 1]) for i in
                  images]
+
+    # Overwrite with the actual images the spaces initialized in 'concat_image' array
     for i, image in enumerate(rescaleds):
         pad_width = (W - image.shape[1] + 1) // 2
         pad_height = (H - image.shape[0] + 1) // 2
@@ -72,7 +79,7 @@ def save_file_with_paths(query_path, preds_paths, positives_paths, output_path):
         _ = file.write("\n".join(file_content))
 
 
-def save_preds(predictions, eval_ds, output_folder, save_only_wrong_preds=None):
+def save_preds(predictions, eval_ds, output_folder, save_only_wrong_preds=None, logger: NeptuneLogger = None):
     """For each query, save an image containing the query and its predictions,
     and a file with the paths of the query, its predictions and its positives.
 
@@ -84,6 +91,7 @@ def save_preds(predictions, eval_ds, output_folder, save_only_wrong_preds=None):
     output_folder : str / Path with the path to save the predictions
     save_only_wrong_preds : bool, if True save only the wrongly predicted queries,
         i.e. the ones where the first pred is uncorrect (further than 25 m)
+    logger : logger to use for storing images and data
     """
     positives_per_query = eval_ds.get_positives()
     os.makedirs(f"{output_folder}/preds", exist_ok=True)
@@ -102,13 +110,20 @@ def save_preds(predictions, eval_ds, output_folder, save_only_wrong_preds=None):
             continue
 
         prediction_image = build_prediction_image(list_of_images_paths, preds_correct)
+        # Log the predicted images
         pred_image_path = f"{output_folder}/preds/{query_index:03d}.jpg"
-        prediction_image.save(pred_image_path)
 
         positives_paths = [eval_ds.database_paths[idx] for idx in positives_per_query[query_index]]
-        save_file_with_paths(
-            query_path=list_of_images_paths[0],
-            preds_paths=list_of_images_paths[1:],
-            positives_paths=positives_paths,
-            output_path=f"{output_folder}/preds/{query_index:03d}.txt"
-        )
+        # Log the positive images
+        if logger is None:
+            save_file_with_paths(
+                query_path=list_of_images_paths[0],
+                preds_paths=list_of_images_paths[1:],
+                positives_paths=positives_paths,
+                output_path=f"{output_folder}/preds/{query_index:03d}.txt"
+            )
+        else:
+            logger.experiment[pred_image_path].log(File.as_image(prediction_image))
+            [logger.experiment[f"{output_folder}/positives/{query_index:03d}_P{i}.jpg"].log(File.as_image(Image.open(path)))
+                           for i, path in enumerate(positives_paths[:4])]
+

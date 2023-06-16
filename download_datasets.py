@@ -1,31 +1,10 @@
 
 
 
-# URLS = {
-#     "tokyo_xs": "https://drive.google.com/file/d/15QB3VNKj93027UAQWv7pzFQO1JDCdZj2/view?usp=share_link",
-#     "sf_xs": "https://drive.google.com/file/d/1tQqEyt3go3vMh4fj_LZrRcahoTbzzH-y/view?usp=share_link",
-#     "gsv_xs": "https://drive.google.com/file/d/1q7usSe9_5xV5zTfN-1In4DlmF5ReyU_A/view?usp=share_link"
-# }
-
-#QUESTI SONO DA GMAIL PRINCIPALE
-# URLS = {
-#     "tokyo_xs": "https://drive.google.com/file/d/1LpxOxwghR5Gfmx5qRCB3rbbWp9OannJi/view?usp=sharing",
-#     "sf_xs": "https://drive.google.com/file/d/1dQt1iIKQAwUcUBkuBXCVkW4epMWbWR_i/view?usp=sharing",
-#     "gsv_xs": "https://drive.google.com/file/d/16iaZMbuWOwmhGDUvNkEYdD4Ste-aFJVC/view?usp=sharing"
-# }
-
-#QUESTI SONO DA CFD-CWE
-# URLS = {
-#     "tokyo_xs": "https://drive.google.com/file/d/10DrpzZ7tl7OStgFDiTJasDbnGv_dxdh_/view?usp=sharing",
-#     "sf_xs": "https://drive.google.com/file/d/1usonhb5qdLsfCKX2zh1H-sfLoiBk_ioV/view?usp=sharing",
-#     "gsv_xs": "https://drive.google.com/file/d/1OSJOGt62aYimScMcoZl_De3TdJhi04OT/view?usp=sharing"
-# }
-
-#QUESTI SONO DA MOR
 URLS = {
-    "tokyo_xs": "https://drive.google.com/file/d/1y8JSyPY1B7uWlVUs_SFC2ZtbSYL9EQ3N/view?usp=sharing",
-    "sf_xs": "https://drive.google.com/file/d/1PSjwD7k-BjO_L12MbYCenoDZjaulJZqz/view?usp=sharing",
-    "gsv_xs": "https://drive.google.com/file/d/1BRdPUXB63j3hmwxpS5IYFCisQYm0FkXn/view?usp=sharing"
+    "tokyo_xs": "https://drive.google.com/file/d/1bY-2wV4HmfUQC_O_CWlDHYL_bOOifTMZ/view?usp=share_link",
+    "sf_xs": "https://drive.google.com/file/d/1sNtAgMYjHZYRHyAdBB4XuyEKB7G452OJ/view?usp=share_link",
+    "gsv_xs": "https://drive.google.com/file/d/1bJC4jWuFNio397PfVrQO53ET3zVvI08u/view?usp=share_link"
 }
 
 
