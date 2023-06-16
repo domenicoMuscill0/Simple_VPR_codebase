@@ -1,20 +1,18 @@
-
 import faiss
 import logging
-import numpy as np
 from typing import Tuple
-from torch.utils.data import Dataset
-
+from pytorch_lightning.loggers import NeptuneLogger
 import visualizations
-#from Simple_VPR_codebase import parser
+from datasets.test_dataset import TestDataset
+import numpy as np
 
 # Compute R@1, R@5, R@10, R@20
 RECALL_VALUES = [1, 5, 10, 20]
 
 
-def compute_recalls(eval_ds: Dataset, queries_descriptors : np.ndarray, database_descriptors : np.ndarray,
-                    output_folder : str = None, num_preds_to_save : int = 0,
-                    save_only_wrong_preds : bool = True) -> Tuple[np.ndarray, str]:
+def compute_recalls(eval_ds: TestDataset, queries_descriptors: np.ndarray, database_descriptors: np.ndarray,
+                    output_folder: str = None, num_preds_to_save: int = 0, num_queries_to_save: int = 0,
+                    save_only_wrong_preds: bool = True, logger: NeptuneLogger = None) -> Tuple[np.ndarray, str]:
     """Compute the recalls given the queries and database descriptors. The dataset is needed to know the ground truth
     positives for each query."""
 
@@ -23,10 +21,12 @@ def compute_recalls(eval_ds: Dataset, queries_descriptors : np.ndarray, database
     faiss_index.add(database_descriptors)
     del database_descriptors
 
-    logging.debug("Calculating recalls")
+    if logger is None:
+        logging.debug("Calculating recalls")
+
     _, predictions = faiss_index.search(queries_descriptors, max(RECALL_VALUES))
 
-    #### For each query, check if the predictions are correct
+    # For each query, check if the predictions are correct
     positives_per_query = eval_ds.get_positives()
     recalls = np.zeros(len(RECALL_VALUES))
     for query_index, preds in enumerate(predictions):
@@ -41,9 +41,7 @@ def compute_recalls(eval_ds: Dataset, queries_descriptors : np.ndarray, database
     # Save visualizations of predictions
     if num_preds_to_save != 0:
         # For each query save num_preds_to_save predictions
-        visualizations.save_preds(predictions[:, :num_preds_to_save], eval_ds, output_folder, save_only_wrong_preds)
-    
+        visualizations.save_preds(predictions[:num_queries_to_save, :num_preds_to_save], eval_ds, output_folder,
+                                  save_only_wrong_preds, logger=logger)
+
     return recalls, recalls_str
-
-
-
