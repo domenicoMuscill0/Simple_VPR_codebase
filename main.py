@@ -34,7 +34,8 @@ class GeoModel(pl.LightningModule):
                  proxy_bank: ProxyBank = None, proxy_head: ProxyHead = None,
                  contrastive_pos_margin=1, contrastive_neg_margin=0,
                  arcface_loss_margin=28.6, arcface_loss_scale=64, arcface_num_classes=10,
-				 arcface_subcenters=1, multisim_alpha=2, multisim_beta=50, multisim_base=0.5
+				         arcface_subcenters=1, multisim_alpha=2, multisim_beta=50, multisim_base=0.5,
+                 triplet_margin=0.05,
                  mix: MixVPR = None):
         super().__init__()
         self.val_dataset = val_dataset
@@ -59,12 +60,14 @@ class GeoModel(pl.LightningModule):
                 num_classes=args.batch_size) # We use batch_size different places
         elif args.manifold_loss:
             self.loss_fn = ManifoldLoss(l=args.descriptors_dim, K=50)
-        elif args.arcface:
-			self.loss_fn = losses.SubCenterArcFaceLoss(arcface_num_classes, descriptors_dim, 
+        elif args.arcface_loss:
+			      self.loss_fn = losses.SubCenterArcFaceLoss(arcface_num_classes, descriptors_dim, 
 													   arcface_loss_margin, arcface_loss_scale,
 													   subcenters=arcface_subcenters)
-			self.automatic_optimization = False
-			self.loss_optimizer = torch.optim.SGD(self.loss_fn.parameters(), lr=0.001)
+			      self.automatic_optimization = False
+			      self.loss_optimizer = torch.optim.SGD(self.loss_fn.parameters(), lr=0.001)
+        elif args.triplet_loss:
+            self.loss_fn = losses.TripletMarginLoss(margin=triplet_margin, distance=CosineSimilarity())
         self.save_hyperparameters(ignore=['proxy_head'])
 
         # Instantiate the Proxy Head and Proxy Bank
@@ -243,6 +246,8 @@ if __name__ == '__main__':
                        "multisim_beta": args.multisim_beta,
                        "multisim_base": args.multisim_base})
         neptune_tags.append("multisim_loss")
+    elif args.triplet_loss:
+        kwargs.update({"triplet_margin":args.triplet_margin})
     else:
         kwargs.update({"contrastive_pos_margin":args.contrastive_pos_margin, 
                        "contrastive_neg_margin":args.contrastive_neg_margin})
