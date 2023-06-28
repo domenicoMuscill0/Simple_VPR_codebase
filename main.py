@@ -5,7 +5,6 @@ from pytorch_metric_learning import losses
 from pytorch_metric_learning import miners
 from torch.utils.data.dataloader import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
-import matplotlib.pyplot as plt
 import utils
 from pytorch_metric_learning.distances import CosineSimilarity
 from pytorch_lightning.loggers import NeptuneLogger
@@ -35,8 +34,8 @@ class GeoModel(pl.LightningModule):
     def __init__(self, val_dataset, test_dataset, descriptors_dim=512, num_preds_to_save=0, save_only_wrong_preds=True,
                  proxy_bank: ProxyBank = None, proxy_head: ProxyHead = None,
                  contrastive_pos_margin=1, contrastive_neg_margin=0,
-                 arcface_loss_margin=28.6, arcface_loss_scale=64, arcface_num_classes=10, arcface_subcenters=1, 
-                 multisim_alpha=2, multisim_beta=50, multisim_base=0.5, multisim_miner_epsilon=0.1
+                 arcface_loss_margin=28.6, arcface_loss_scale=64, arcface_num_classes=10, arcface_subcenters=1,
+                 multisim_alpha=2, multisim_beta=50, multisim_base=0.5, multisim_miner_epsilon=0.1,
                  triplet_margin=0.05, triplet_miner_margin=0.2,
                  mix: MixVPR = None):
         super().__init__()
@@ -55,19 +54,19 @@ class GeoModel(pl.LightningModule):
 
         # Set the loss function
 
-        self.loss_fn = losses.ContrastiveLoss(pos_margin=contrastive_pos_margin, 
+        self.loss_fn = losses.ContrastiveLoss(pos_margin=contrastive_pos_margin,
                                               neg_margin=contrastive_neg_margin, distance=CosineSimilarity())
         if args.p2s_grad_loss and not args.manifold_loss:
             self.loss_fn = P2SGradLoss(descriptors_dim=args.descriptors_dim,
-                num_classes=args.batch_size) # We use batch_size different places
+                                       num_classes=args.batch_size)  # We use batch_size different places
         elif args.manifold_loss:
             self.loss_fn = ManifoldLoss(l=args.descriptors_dim, K=50)
         elif args.arcface_loss:
-			      self.loss_fn = losses.SubCenterArcFaceLoss(arcface_num_classes, descriptors_dim, 
-													   arcface_loss_margin, arcface_loss_scale,
-													   subcenters=arcface_subcenters)
-			      self.automatic_optimization = False
-			      self.loss_optimizer = torch.optim.SGD(self.loss_fn.parameters(), lr=0.001)
+            self.loss_fn = losses.SubCenterArcFaceLoss(arcface_num_classes, descriptors_dim,
+                                                       arcface_loss_margin, arcface_loss_scale,
+                                                       subcenters=arcface_subcenters)
+            self.automatic_optimization = False
+            self.loss_optimizer = torch.optim.SGD(self.loss_fn.parameters(), lr=0.001)
         elif args.multisim_loss:
             self.loss_fn = losses.MultisimilarityLoss(alpha=multisim_alpha, beta=multisim_beta, base=multisim_base)
             if args.miner:
@@ -76,7 +75,7 @@ class GeoModel(pl.LightningModule):
             self.loss_fn = losses.TripletMarginLoss(margin=triplet_margin, distance=CosineSimilarity())
             if args.miner:
                 self.miner = miners.TripletMarginMiner(margin=triplet_miner_margin, distance=CosineSimilarity())
-            
+
         self.save_hyperparameters(ignore=['proxy_head'])
 
         # Instantiate the Proxy Head and Proxy Bank
@@ -112,7 +111,7 @@ class GeoModel(pl.LightningModule):
 
         return descriptors
 
-    #COSINE_ANNEALING
+    # COSINE_ANNEALING
     # def configure_optimizers(self):
     #     if args.optimizer == "SGD_cosine":
     #         optimizers = torch.optim.SGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay, momentum=0.9)
@@ -122,8 +121,7 @@ class GeoModel(pl.LightningModule):
     #          "scheduler": torch.optim.lr_scheduler.CosineAnnealingLR(optimizers, 5, eta_min=args.learning_rate*0.01, last_epoch=- 1, verbose=True),
     #          "frequency": 1}}
 
-
-    #REDUCE_LR_ON_PLATEAU
+    # REDUCE_LR_ON_PLATEAU
     # def configure_optimizers(self):
     #     if args.optimizer == "SGD_plateau":
     #         optimizers = torch.optim.SGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay, momentum=0.9)
@@ -133,10 +131,12 @@ class GeoModel(pl.LightningModule):
     #         "scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(optimizers, mode='min', factor=0.1, verbose=True,
     #                                                                 patience=0), "monitor": 'R@1', "frequency": 1}}
 
-    #NO SCHEDULING
+    # NO SCHEDULING
     def configure_optimizers(self):
+        optimizers = None
         if args.optimizer == "SGD":
-            optimizers = torch.optim.SGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay, momentum=0.9)
+            optimizers = torch.optim.SGD(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay,
+                                         momentum=0.9)
         if args.optimizer == "AdamW":
             optimizers = torch.optim.AdamW(self.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
         if args.optimizer == "ASGD":
@@ -148,9 +148,9 @@ class GeoModel(pl.LightningModule):
     #  The loss function call (this method will be called at each training iteration)
     def loss_function(self, descriptors, labels):
         if args.triplet_miner:
-            loss = self.loss_fn(descriptors, labels, self.miner(descriptors,labels))
+            loss = self.loss_fn(descriptors, labels, self.miner(descriptors, labels))
         else:
-            loss = self.loss_fn(descriptors, labels)#, self.miner(descriptors,labels))
+            loss = self.loss_fn(descriptors, labels)  # , self.miner(descriptors,labels))
         return loss
 
     # This is the training step that's executed at each iteration
@@ -165,7 +165,7 @@ class GeoModel(pl.LightningModule):
             template_descriptors = self.ti(images)
             template_descriptors = self(template_descriptors)
             template_distance = torch.norm(descriptors - template_descriptors, p=2, dim=1)
-    
+
         if args.manifold_loss:
             labels = None
         if args.p2s_grad_loss:
@@ -189,14 +189,13 @@ class GeoModel(pl.LightningModule):
                 DataLoader(dataset=self.trainer.train_dataloader.dataset,
                            batch_sampler=HardSampler(indexes_list=ids),
                            num_workers=args.num_workers)
-		if args.arcface_loss:
-			NNopt, LossOpt = self.optimizers()
-			NNopt.zero_grad()
-			LossOpt.zero_grad()
-			self.manual_backward(loss)
-        	NNopt.step()
-        	LossOpt.step()
-
+        if args.arcface_loss:
+            NNopt, LossOpt = self.optimizers()
+            NNopt.zero_grad()
+            LossOpt.zero_grad()
+            self.manual_backward(loss)
+            NNopt.step()
+            LossOpt.step()
 
         self.log('loss', loss.item(), logger=True)
         return {'loss': loss}
@@ -235,11 +234,10 @@ class GeoModel(pl.LightningModule):
         self.log('R@5', recalls[1], prog_bar=False, logger=True)
 
 
-
 def get_datasets_and_dataloaders(args):
     train_transform = tfm.Compose([
         # tfm.RandAugment(num_ops=3),
-        tfm.GaussianBlur(11),   # High kernel size to make the blurring not too invalidating
+        tfm.GaussianBlur(11),  # High kernel size to make the blurring not too invalidating
         tfm.ColorJitter(brightness=0.7),
         tfm.ToTensor(),
         tfm.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
@@ -263,50 +261,50 @@ if __name__ == '__main__':
     kwargs = {"descriptors_dim": args.descriptors_dim, "num_preds_to_save": args.num_preds_to_save,
               "save_only_wrong_preds": args.save_only_wrong_preds}
     PARAMS = {
-            "batch_size": args.batch_size,
-            "lr": 0.001,
-            "max_epochs": args.max_epochs,
-            "test_set": args.test_path,
-            "val_set": args.val_path
+        "batch_size": args.batch_size,
+        "lr": 0.001,
+        "max_epochs": args.max_epochs,
+        "test_set": args.test_path,
+        "val_set": args.val_path
     }
     neptune_tags = []
 
     train_dataset, val_dataset, test_dataset, train_loader, val_loader, test_loader = get_datasets_and_dataloaders(args)
-if args.arcface_loss:
-    kwargs.update({"arcface_loss_margin":args.arcface_loss_margin, 
-		       "arcface_loss_scale":args.arcface_loss_scale,
-		       "arcface_subcenters":args.arcface_subcenters})
-	PARAMS.update({"arcface_loss_margin":args.arcface_loss_margin, 
-					   "arcface_loss_scale":args.arcface_loss_scale,
-					   "arcface_subcenters":args.arcface_subcenters})
-	neptune_tags.append("arcface_loss")
-elif args.multisim_loss:
-    kwargs.update({"multisim_alpha":args.multisim_alpha, 
-                       "multisim_beta":args.multisim_beta, 
-                       "multisim_base":args.multisim_base})
-    PARAMS.update({"multisim_alpha": args.multisim_alpha,
+    if args.arcface_loss:
+        kwargs.update({"arcface_loss_margin": args.arcface_loss_margin,
+                       "arcface_loss_scale": args.arcface_loss_scale,
+                       "arcface_subcenters": args.arcface_subcenters})
+        PARAMS.update({"arcface_loss_margin": args.arcface_loss_margin,
+                       "arcface_loss_scale": args.arcface_loss_scale,
+                       "arcface_subcenters": args.arcface_subcenters})
+        neptune_tags.append("arcface_loss")
+    elif args.multisim_loss:
+        kwargs.update({"multisim_alpha": args.multisim_alpha,
                        "multisim_beta": args.multisim_beta,
                        "multisim_base": args.multisim_base})
-    neptune_tags.append("multisim_loss")
+        PARAMS.update({"multisim_alpha": args.multisim_alpha,
+                       "multisim_beta": args.multisim_beta,
+                       "multisim_base": args.multisim_base})
+        neptune_tags.append("multisim_loss")
     if args.miner:
-        kwargs.update({"multisim_miner_epsilon":args.multisim_miner_epsilon})
-        PARAMS.update({"multisim_miner_epsilon":args.multisim_miner_epsilon})
+        kwargs.update({"multisim_miner_epsilon": args.multisim_miner_epsilon})
+        PARAMS.update({"multisim_miner_epsilon": args.multisim_miner_epsilon})
         neptune_tags.append("multisim_miner")
     elif args.triplet_loss:
-        kwargs.update({"triplet_margin":args.triplet_margin})
-        PARAMS.update({"triplet_margin":args.triplet_margin})
+        kwargs.update({"triplet_margin": args.triplet_margin})
+        PARAMS.update({"triplet_margin": args.triplet_margin})
         neptune_tags.append("triplet_loss")
         if args.miner:
-            kwargs.update({"triplet_miner_margin":args.triplet_miner_margin})
-            PARAMS.update({"triplet_miner_margin":args.triplet_miner_margin})
+            kwargs.update({"triplet_miner_margin": args.triplet_miner_margin})
+            PARAMS.update({"triplet_miner_margin": args.triplet_miner_margin})
             neptune_tags.append("triplet_miner")
     else:
-        kwargs.update({"contrastive_pos_margin":args.contrastive_pos_margin, 
-                       "contrastive_neg_margin":args.contrastive_neg_margin})
+        kwargs.update({"contrastive_pos_margin": args.contrastive_pos_margin,
+                       "contrastive_neg_margin": args.contrastive_neg_margin})
         PARAMS.update({"contrastive_pos_margin": args.contrastive_pos_margin,
                        "contrastive_neg_margin": args.contrastive_neg_margin})
         neptune_tags.append("contrastive_loss")
-      
+
     if args.gpm:
         proxy_head = ProxyHead(out_dim=128, in_dim=args.descriptors_dim)
         proxy_bank = ProxyBank(k=4)
@@ -337,8 +335,7 @@ elif args.multisim_loss:
         model = GeoModel(**kwargs)
     else:
         print("Error, no valid load checkpoint string")
-        os.exit()
-
+        exit(-1)
 
     if args.neptune_api_key:
         neptune_logger = NeptuneLogger(
@@ -359,8 +356,6 @@ elif args.multisim_loss:
 
     # Model params saving using Pytorch Lightning. Save the best 3 models according to Recall@1
 
-
-
     checkpoint_cb = ModelCheckpoint(
         monitor='R@1',
         filename='_epoch({epoch:02d})_step({step:04d})_R@1[{val/R@1:.4f}]_R@5[{val/R@5:.4f}]',
@@ -378,10 +373,9 @@ elif args.multisim_loss:
             tags=neptune_tags,
             log_model_checkpoints=True
         )
-        
 
         neptune_logger.log_hyperparams(params=PARAMS)
-        
+
         trainer = pl.Trainer(
             accelerator='gpu',
             devices=-1,
